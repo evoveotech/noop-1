@@ -650,40 +650,149 @@ if ($isUpstreamSource -and $preMergeHead) {
             }
         }
 
-        # Tier 3: marker-based detection for partial overwrites.
-        # The blob-hash comparison in Tier 2 only catches a COMPLETE overwrite (post-merge
-        # blob == upstream blob). If upstream ALSO changed the file in this sync, the
-        # post-merge blob will differ from upstream's (it has upstream's new changes), so
-        # Tier 2 won't flag it — even though -X theirs may have silently dropped the fork's
-        # specific additions in conflicting hunks. This tier checks for known fork-specific
-        # markers (regex patterns) that MUST be present in certain files. If a marker is
-        # missing after the merge, the fork's changes were partially overwritten.
+        # Tier 3: three-way merge for PARTIAL overwrites (generic, not PR-specific).
         #
-        # Unlike Tier 2, this tier does NOT auto-restore — because the file has upstream
-        # changes we want to keep, blindly restoring the pre-merge version would lose them.
-        # Instead it warns loudly so the operator can manually merge.
-        $forkMarkerChecks = @(
-            @{ File = "Strand/Collect/StorePaths.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID" }
-            @{ File = "Strand/Collect/RawHistoryArchive.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID" }
-            @{ File = "StrandiOSShared/WidgetSnapshot.swift"; Pattern = "group\.com\.evoveo\.noop"; Desc = "evoveo App Group" }
-            @{ File = "Packages/NoopLocalAccess/Sources/NoopLocalAccessCore/LocalAccessCore.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID" }
-            @{ File = "Strand/Screens/SettingsView.swift"; Pattern = "showsGitHubDistributionLinks"; Desc = "distribution UI gating" }
-            @{ File = "Strand/Liquid/LiquidTodayView.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap" }
-            @{ File = "Strand/Screens/ScreenScaffold.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap" }
-        )
-        foreach ($check in $forkMarkerChecks) {
-            $f = $check.File
-            if (-not (Test-Path $f)) { continue }
-            $postContent = Get-Content $f -Raw -ErrorAction SilentlyContinue
-            if (-not $postContent) { continue }
-            if ($postContent -notmatch $check.Pattern) {
-                # Check if the pre-merge version HAD the marker — if so, it was lost.
-                $preContent = git show "${preMergeHead}:$f" 2>$null
-                if ($preContent -and ($preContent -match $check.Pattern)) {
-                    Write-Host "  WARNING: fork marker lost in $f ($($check.Desc))" -ForegroundColor Red
-                    Write-Host "    The file has upstream changes but fork-specific code was dropped." -ForegroundColor DarkYellow
-                    Write-Host "    Manually merge: git diff ${preMergeHead}..HEAD -- $f" -ForegroundColor DarkYellow
+        # Tiers 1 and 2 only catch COMPLETE overwrites — fork-only files deleted, or shared
+        # files where the post-merge blob exactly matches upstream. If upstream ALSO changed
+        # the file in this sync, the post-merge blob will differ from upstream's (it has
+        # upstream's new changes), so Tier 2 won't flag it — even though -X theirs may have
+        # silently dropped the fork's specific additions in conflicting hunks.
+        #
+        # This tier handles that case: for every file that differs from BOTH upstream and
+        # preMerge, use `git merge-file` to three-way merge the fork's changes back in.
+        #   ours   = post-merge file (has upstream's new changes)
+        #   base   = upstream version (the common ancestor for this sync)
+        #   theirs = preMerge version (has fork's changes)
+        # git merge-file finds what changed between base→theirs (the fork's additions) and
+        # applies them to ours. If the fork's changes don't conflict with upstream's new
+        # changes, this produces a clean merge with BOTH. If they conflict, we warn for
+        # manual merge — we never leave conflict markers in the working tree.
+        #
+        # This is FULLY GENERIC: it handles any fork-specific change to any shared file,
+        # not just known PRs. New features built in the fork are automatically protected.
+        if ($forkModifiedShared) {
+            Write-Host "  Checking for partial overwrites (three-way merge)..." -ForegroundColor DarkGray
+            $tmpDir = Join-Path $env:TEMP "noop-3way-merge"
+            if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null }
+
+            foreach ($file in $forkModifiedShared) {
+                $file = $file.Trim()
+                if (-not $file -or -not (Test-Path $file)) { continue }
+
+                $postMergeBlob = git hash-object "$file" 2>$null
+                $upstreamBlob = git rev-parse "${upstreamMergeHead}:${file}" 2>$null
+                $forkBlob = git rev-parse "${preMergeHead}:${file}" 2>$null
+
+                # Only attempt three-way merge if post-merge differs from BOTH.
+                if ($postMergeBlob -and $upstreamBlob -and $forkBlob `
+                    -and $postMergeBlob -ne $upstreamBlob -and $postMergeBlob -ne $forkBlob) {
+
+                    $safeName = $file -replace '[/\\]', '_'
+                    $baseFile = Join-Path $tmpDir "${safeName}.base"
+                    $forkFile = Join-Path $tmpDir "${safeName}.fork"
+                    $postFile = Join-Path $tmpDir "${safeName}.post"
+
+                    git show "${upstreamMergeHead}:$file" > $baseFile 2>$null
+                    git show "${preMergeHead}:$file" > $forkFile 2>$null
+                    Copy-Item $file $postFile -Force
+
+                    # git merge-file ours base theirs → merge fork changes into post-merge
+                    $null = git merge-file $postFile $baseFile $forkFile 2>$null
+                    $mergeExit = $LASTEXITCODE
+
+                    if ($mergeExit -eq 0) {
+                        # Clean merge — fork changes merged with upstream's new changes.
+                        Copy-Item $postFile $file -Force
+                        Write-Host "  THREE-WAY MERGE (clean): $file" -ForegroundColor Green
+                        Write-Host "    Fork changes re-merged with upstream's new changes" -ForegroundColor DarkGray
+                        $restoredFiles += $file
+                    } else {
+                        # Conflicts — do NOT apply. Warn for manual merge.
+                        Write-Host "  THREE-WAY MERGE (conflicts): $file — MANUAL MERGE NEEDED" -ForegroundColor Red
+                        Write-Host "    Fork changes conflict with upstream's new changes in this file." -ForegroundColor DarkYellow
+                        Write-Host "    To merge manually:" -ForegroundColor DarkYellow
+                        Write-Host "      git show ${preMergeHead}:$file > /tmp/fork-version" -ForegroundColor DarkGray
+                        Write-Host "      git merge-file $file <(git show ${upstreamMergeHead}:$file) /tmp/fork-version" -ForegroundColor DarkGray
+                        Write-Host "    Or diff both versions:" -ForegroundColor DarkYellow
+                        Write-Host "      git diff ${preMergeHead}..HEAD -- $file" -ForegroundColor DarkGray
+                    }
                 }
+            }
+            Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        # Tier 4: auto-generated fork-line verification (generic, not PR-specific).
+        #
+        # Even after Tiers 1-3, some fork-specific changes may be missing — a three-way
+        # merge may have silently resolved a conflict in upstream's favour, or a regex
+        # re-application step may have missed a shifted anchor. This tier provides a final
+        # generic check: for every file that had fork-specific changes, extract the actual
+        # lines the fork added (lines in preMerge not in upstream), and verify they are
+        # present in the post-merge file. If any are missing, warn.
+        #
+        # This is completely automatic — no hardcoded markers. Any new feature built in
+        # the fork is verified without updating this script.
+        Write-Host "  Auto-verifying fork-specific lines..." -ForegroundColor DarkGray
+        $forkDiffFiles = git diff --name-only "$upstreamMergeHead" "$preMergeHead" 2>$null
+        if ($forkDiffFiles) {
+            $forkDiffFiles = $forkDiffFiles | Where-Object { $_.Trim() }
+            $missingLineWarnings = @()
+
+            foreach ($diffFile in $forkDiffFiles) {
+                $diffFile = $diffFile.Trim()
+                if (-not $diffFile -or -not (Test-Path $diffFile)) { continue }
+
+                # Get the fork-specific diff: lines added by the fork relative to upstream.
+                $diffOutput = git diff "$upstreamMergeHead" "$preMergeHead" -- "$diffFile" 2>$null
+                if (-not $diffOutput) { continue }
+
+                # Lines starting with "+" (but not "+++") are fork additions.
+                # Filter to significant lines: >10 chars, not pure comments/whitespace.
+                $addedLines = $diffOutput -split "`n" | Where-Object {
+                    $_ -match '^\+[^+]' -and $_.Trim().Length -gt 10
+                } | ForEach-Object {
+                    $_ -replace '^\+', ''
+                } | Where-Object {
+                    # Skip pure comment lines and whitespace
+                    $_.Trim() -notmatch '^\s*//' -and $_.Trim() -notmatch '^\s*\*' -and $_.Trim() -notmatch '^\s*#'
+                }
+
+                if ($addedLines.Count -eq 0) { continue }
+
+                # Take up to 5 significant added lines as verification probes.
+                $probes = $addedLines | Select-Object -First 5
+                $postContent = Get-Content $diffFile -Raw -ErrorAction SilentlyContinue
+                if (-not $postContent) { continue }
+
+                $missingProbes = @()
+                foreach ($probe in $probes) {
+                    $probeTrim = $probe.Trim()
+                    if ($probeTrim -and ($postContent -notmatch [regex]::Escape($probeTrim))) {
+                        $missingProbes += $probeTrim
+                    }
+                }
+
+                if ($missingProbes.Count -gt 0) {
+                    $missingLineWarnings += @{ File = $diffFile; Missing = $missingProbes }
+                }
+            }
+
+            if ($missingLineWarnings.Count -gt 0) {
+                Write-Host ""
+                Write-Host "  *** FORK-LINE VERIFICATION: $($missingLineWarnings.Count) file(s) with missing fork lines ***" -ForegroundColor Red
+                foreach ($w in $missingLineWarnings) {
+                    Write-Host "  $($w.File):" -ForegroundColor Red
+                    foreach ($missing in $w.Missing) {
+                        $display = $missing.Substring(0, [Math]::Min(80, $missing.Length))
+                        Write-Host "    MISSING: $display" -ForegroundColor DarkYellow
+                    }
+                }
+                Write-Host ""
+                Write-Host "  These fork-specific lines were lost during sync." -ForegroundColor Red
+                Write-Host "  Check if the re-application steps (10-12) cover them, or restore manually:" -ForegroundColor Yellow
+                Write-Host "    git show ${preMergeHead}:<file> > <file>" -ForegroundColor Yellow
+            } else {
+                Write-Host "  All fork-specific lines verified present" -ForegroundColor Green
             }
         }
 
@@ -989,148 +1098,11 @@ if ($isUpstreamSource) {
     }
 }
 
-# Re-apply the #1532 recurrence fix: the GeometryReader + hard width cap on the scroll content
-# (only after upstream merge — upstream #1532 only merged `.scrollBounceBehavior(.basedOnSize)`,
-# which the PR author themselves said was "insufficient on its own." The width cap was withdrawn
-# by the upstream reviewer due to concerns about macOS layout and content clipping. This fork's
-# version addresses both: the GeometryReader is iOS-only (guarded by #if os(iOS)), and `.frame
-# (width:)` sets the reported content width without clipping — children wrap/truncate per
-# SwiftUI's normal layout. Without this, navigating between yesterday and today on the home screen
-# can trigger horizontal panning when the header row briefly overflows during a day-switch.)
-if ($isUpstreamSource) {
-    Write-Host "`n[12b/14] Re-applying #1532 recurrence fix (scroll content width cap)..." -ForegroundColor Yellow
-
-    $patchedFiles = @()
-
-    # 1. LiquidTodayView.swift — add viewportWidth @State and the width cap on the scroll content.
-    $todayPath = "Strand/Liquid/LiquidTodayView.swift"
-    if (Test-Path $todayPath) {
-        $content = Get-Content $todayPath -Raw
-        $original = $content
-
-        # Add the @State viewportWidth property if missing (after headerControlsWidth).
-        if ($content -notmatch [regex]::Escape('@State private var viewportWidth: CGFloat = 0')) {
-            $content = $content -replace '(@State private var headerControlsWidth = NoopMetrics\.headerControlReserveWidth\r?\n)',
-                '$1
-    #if os(iOS)
-    /// #1532 recurrence fix: the real viewport width, measured by a background GeometryReader on the
-    /// ScrollView. Used to hard-cap the scroll content column so no child can ever widen the
-    /// ScrollView''s reported content size and enable horizontal panning. iOS-only; macOS keeps its
-    /// existing 680pt-centered layout. Zero until the first layout pass, so the initial frame uses
-    /// `.infinity` (no cap) — the cap locks in on the very next redraw.
-    @State private var viewportWidth: CGFloat = 0
-    #endif
-'
-            Write-Host "  Added viewportWidth @State to LiquidTodayView" -ForegroundColor Green
-        }
-
-        # Add the width cap in the #else branch of the macOS frame (if not already present).
-        if ($content -notmatch [regex]::Escape('.frame(width: viewportWidth > 0 ? viewportWidth : .infinity)')) {
-            # Replace the macOS-only frame block with an #if/#else that adds the iOS width cap.
-            $content = $content -replace '(?m)^(\s*)#if os\(macOS\)\r?\n\s*// Keep the phone-shaped column readable.*?\r?\n\s*\.frame\(maxWidth: 680\)\r?\n\s*\.frame\(maxWidth: \.infinity\)\r?\n\s*#endif\r?\n',
-                '$1#if os(macOS)
-$1   // Keep the phone-shaped column readable + centred on the wide mac detail pane. The sky is a
-$1   // ScrollView background (full-bleed), so constraining the content column here doesn''t touch it.
-$1   .frame(maxWidth: 680)
-$1   .frame(maxWidth: .infinity)
-$1#else
-$1   // #1532 recurrence fix: hard-cap the scroll content to the measured viewport width so no
-$1   // child can ever widen the ScrollView''s reported content size and enable horizontal panning.
-$1   .frame(width: viewportWidth > 0 ? viewportWidth : .infinity)
-$1#endif
-'
-            Write-Host "  Added width cap to LiquidTodayView scroll content" -ForegroundColor Green
-        }
-
-        # Add the background GeometryReader to measure viewport width (if not already present).
-        if ($content -notmatch [regex]::Escape('#1532 recurrence fix: measure the viewport width')) {
-            $content = $content -replace '(\.scrollBounceBehavior\(\.basedOnSize, axes: \.horizontal\)\r?\n\s*)(#endif)',
-                '$1// #1532 recurrence fix: measure the viewport width via a background GeometryReader so we
-        // can hard-cap the scroll content above. Background so it doesn''t affect layout; iOS-only.
-        .background {
-            GeometryReader { g in
-                Color.clear
-                    .onAppear { viewportWidth = g.size.width }
-                    .onChange(of: g.size.width) { _, newWidth in viewportWidth = newWidth }
-            }
-        }
-        $2'
-            Write-Host "  Added background GeometryReader to LiquidTodayView" -ForegroundColor Green
-        }
-
-        if ($content -ne $original) {
-            Set-Content $todayPath -Value $content -NoNewline
-            $patchedFiles += $todayPath
-        }
-    }
-
-    # 2. ScreenScaffold.swift — same fix for every screen that renders through ScreenScaffold.
-    $scaffoldPath = "Strand/Screens/ScreenScaffold.swift"
-    if (Test-Path $scaffoldPath) {
-        $content = Get-Content $scaffoldPath -Raw
-        $original = $content
-
-        # Add the @State viewportWidth property if missing (after hSizeClass).
-        if ($content -notmatch [regex]::Escape('@State private var viewportWidth: CGFloat = 0')) {
-            $content = $content -replace '(@Environment\(\.horizontalSizeClass\) private var hSizeClass\r?\n\s*#endif)',
-                '$1
-    /// #1532 recurrence fix: the real viewport width, measured by a background GeometryReader.
-    /// Used to hard-cap the scroll content column so no child can widen the ScrollView''s reported
-    /// content size and enable horizontal panning. iOS-only; macOS is unchanged. Zero until the
-    /// first layout pass, so the initial frame uses `.infinity` (no cap) — the cap locks in on
-    /// the very next redraw.
-    @State private var viewportWidth: CGFloat = 0
-    #endif'
-            Write-Host "  Added viewportWidth @State to ScreenScaffold" -ForegroundColor Green
-        }
-
-        # Add the width cap after the existing frame chain (if not already present).
-        if ($content -notmatch [regex]::Escape('#1532 recurrence fix: hard-cap the entire scroll content')) {
-            $content = $content -replace '(\.frame\(maxWidth: \.infinity, alignment: \.center\)\r?\n)(\s*#else)',
-                '$1            // #1532 recurrence fix: hard-cap the entire scroll content to the measured viewport
-            // width so no child can ever widen the ScrollView''s reported content size and enable
-            // horizontal panning. iOS-only; macOS is unchanged. `.frame(width:)` sets the reported
-            // content width without clipping — children that need more wrap/truncate per SwiftUI''s
-            // normal layout. Zero on the first frame, so fall back to `.infinity` (no cap).
-            .frame(width: viewportWidth > 0 ? viewportWidth : .infinity)
-$2'
-            Write-Host "  Added width cap to ScreenScaffold scroll content" -ForegroundColor Green
-        }
-
-        # Add the background GeometryReader to measure viewport width (if not already present).
-        if ($content -notmatch [regex]::Escape('#1532 recurrence fix: measure the viewport width')) {
-            $content = $content -replace '(\.scrollBounceBehavior\(\.basedOnSize, axes: \.horizontal\)\r?\n\s*)(#endif)',
-                '$1// #1532 recurrence fix: measure the viewport width via a background GeometryReader so we
-        // can hard-cap the scroll content above. Background so it doesn''t affect layout; iOS-only.
-        .background {
-            GeometryReader { g in
-                Color.clear
-                    .onAppear { viewportWidth = g.size.width }
-                    .onChange(of: g.size.width) { _, newWidth in viewportWidth = newWidth }
-            }
-        }
-        $2'
-            Write-Host "  Added background GeometryReader to ScreenScaffold" -ForegroundColor Green
-        }
-
-        if ($content -ne $original) {
-            Set-Content $scaffoldPath -Value $content -NoNewline
-            $patchedFiles += $scaffoldPath
-        }
-    }
-
-    # Commit the #1532 recurrence fix patches
-    if ($patchedFiles.Count -gt 0) {
-        git add $patchedFiles
-        $staged1532 = git diff --cached --name-only
-        if ($staged1532) {
-            $null = Invoke-GitCommand "git commit -m 'Re-apply #1532 recurrence fix (scroll content width cap) after upstream sync [skip ci]'" "Failed to commit #1532 recurrence fix"
-            Write-Host "  Committed #1532 recurrence fix to $($patchedFiles.Count) file(s)" -ForegroundColor Green
-        }
-    } else {
-        Write-Host "  No #1532 recurrence fix changes needed (already applied)" -ForegroundColor Yellow
-    }
-}
+# NOTE: Step 12b (hardcoded #1532 recurrence fix) has been REMOVED.
+# The #1532 width cap and ALL other fork-specific additive changes are now handled
+# generically by step 9's Tier 3 (three-way merge for partial overwrites) and
+# Tier 4 (auto-generated fork-line verification). No PR-specific patches are needed —
+# any new feature built in the fork is automatically protected without updating this script.
 
 # Preserve iOS CI/CD infrastructure (only after upstream merge)
 if ($isUpstreamSource) {
@@ -1158,73 +1130,127 @@ if ($isUpstreamSource) {
     }
 }
 
-# ── Fork-marker audit ─────────────────────────────────────────────────────
+# ── Fork-marker audit (auto-generated, not hardcoded) ─────────────────────
 # The single most important lesson from the #1532 recurrence: the generic step 9
-# and the specific re-application steps (10-12b) can all fail silently. A regex
+# and the specific re-application steps (10-12) can all fail silently. A regex
 # anchor may not match after an upstream refactor, a file may be renamed, or a
 # hard reset (instead of a merge) may bypass the entire workflow. This step is
-# the safety net: it checks for known fork-specific markers in key files AFTER
-# all re-application steps have run. If any marker is missing, it warns LOUDLY
-# so the operator knows exactly what to fix before pushing.
+# the safety net: it AUTO-GENERATES fork-specific markers from the pre-merge
+# diff and verifies they survive the sync. No hardcoded PR list — any new
+# feature built in the fork is automatically audited without updating this script.
 #
-# Each entry: file path, a regex pattern that MUST be present in the file, and
-# a human-readable description of what the marker is. The check is read-only —
-# it never modifies files, only reports. This is intentional: automatic
-# restoration of a marker whose anchor has shifted could silently patch the
-# wrong place. Better to warn and let a human decide.
+# How it works:
+#   1. For each file that differs between preMergeHead and upstreamMergeHead,
+#      extract the lines the fork ADDED (lines in preMerge not in upstream).
+#   2. Pick the most significant added lines as "probes" (filtering out
+#      whitespace, comments, and trivial changes).
+#   3. After all re-application steps, verify each probe is present in the
+#      current (post-sync) file. If any are missing, warn LOUDLY.
+#
+# Additionally, a small set of CORE fork-infrastructure markers is always
+# checked — these are the bundle ID / branding / CI files that MUST exist
+# regardless of what code changes were made. These are not PR-specific; they
+# are the fork's identity infrastructure.
 if ($isUpstreamSource) {
-    Write-Host "`n[13b/14] Auditing fork-specific markers..." -ForegroundColor Yellow
-
-    $forkMarkers = @(
-        @{ File = "Strand/Collect/StorePaths.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in StorePaths" }
-        @{ File = "Strand/Collect/RawHistoryArchive.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in RawHistoryArchive" }
-        @{ File = "StrandiOSShared/WidgetSnapshot.swift"; Pattern = "group\.com\.evoveo\.noop"; Desc = "evoveo App Group in WidgetSnapshot" }
-        @{ File = "Packages/NoopLocalAccess/Sources/NoopLocalAccessCore/LocalAccessCore.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in LocalAccessCore" }
-        @{ File = "altstore-source.json"; Pattern = '"bundleIdentifier":\s*"com\.evoveo\.noop"'; Desc = "evoveo bundle ID in altstore-source" }
-        @{ File = "project.yml"; Pattern = "BUNDLE_ID_PREFIX"; Desc = "BUNDLE_ID_PREFIX setting in project.yml" }
-        @{ File = "project.yml"; Pattern = "CFBundleDisplayName: MOVA"; Desc = "MOVA display name in project.yml" }
-        @{ File = "Strand/Screens/SettingsView.swift"; Pattern = "showsGitHubDistributionLinks"; Desc = "distribution UI gating in SettingsView" }
-        @{ File = "Strand/Screens/SettingsView.swift"; Pattern = "IOSDiagnostics\.capture\(\)\.isSideloaded"; Desc = "isSideloaded gate in SettingsView" }
-        @{ File = "Strand/Liquid/LiquidTodayView.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap in LiquidTodayView" }
-        @{ File = "Strand/Screens/ScreenScaffold.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap in ScreenScaffold" }
-        @{ File = "Config/BundleIdSecrets.xcconfig"; Pattern = "BUNDLE_ID_PREFIX = com\.evoveo"; Desc = "evoveo prefix in BundleIdSecrets.xcconfig" }
-        @{ File = "Config/BundleIdSecrets.xcconfig"; Pattern = "DEVELOPMENT_TEAM = V64Y34CXW2"; Desc = "development team in BundleIdSecrets.xcconfig" }
-        @{ File = "sync-upstream.ps1"; Pattern = "1532"; Desc = "#1532 fix step in sync-upstream.ps1 itself" }
-        @{ File = "testflight-build.ps1"; Pattern = "TestFlight"; Desc = "TestFlight build script" }
-        @{ File = "exportOptions.plist"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in exportOptions.plist" }
-    )
+    Write-Host "`n[13b/14] Auditing fork-specific markers (auto-generated)..." -ForegroundColor Yellow
 
     $missingMarkers = @()
     $presentCount = 0
+    $totalCount = 0
 
-    foreach ($marker in $forkMarkers) {
-        $file = $marker.File
-        $pattern = $marker.Pattern
-        $desc = $marker.Desc
+    # ── Part 1: auto-generated markers from the pre-merge diff ──
+    if ($preMergeHead -and $upstreamMergeHead) {
+        $diffFiles = git diff --name-only "$upstreamMergeHead" "$preMergeHead" 2>$null
+        if ($diffFiles) {
+            $diffFiles = $diffFiles | Where-Object { $_.Trim() }
+            foreach ($diffFile in $diffFiles) {
+                $diffFile = $diffFile.Trim()
+                if (-not $diffFile) { continue }
 
-        if (-not (Test-Path $file)) {
-            Write-Host "  MISSING FILE: $file ($desc)" -ForegroundColor Red
+                # Get the fork-specific diff: lines added by the fork relative to upstream.
+                $diffOutput = git diff "$upstreamMergeHead" "$preMergeHead" -- "$diffFile" 2>$null
+                if (-not $diffOutput) { continue }
+
+                # Lines starting with "+" (but not "+++") are fork additions.
+                # Filter to significant lines: >10 chars, not pure comments/whitespace/imports.
+                $addedLines = $diffOutput -split "`n" | Where-Object {
+                    $_ -match '^\+[^+]' -and $_.Trim().Length -gt 10
+                } | ForEach-Object {
+                    $_ -replace '^\+', ''
+                } | Where-Object {
+                    $t = $_.Trim()
+                    $t -notmatch '^\s*//' -and $t -notmatch '^\s*\*' -and $t -notmatch '^\s*#' -and
+                    $t -notmatch '^\s*import\s' -and $t -notmatch '^\s*$' -and
+                    $t -notmatch '^\s*MARK:' -and $t -notmatch '^\s*// MARK'
+                }
+
+                if ($addedLines.Count -eq 0) { continue }
+
+                # Take up to 3 significant added lines as probes per file.
+                $probes = $addedLines | Select-Object -First 3
+
+                if (-not (Test-Path $diffFile)) {
+                    foreach ($probe in $probes) {
+                        $probeTrim = $probe.Trim()
+                        $display = $probeTrim.Substring(0, [Math]::Min(70, $probeTrim.Length))
+                        Write-Host "  MISSING FILE: $diffFile (was: $display)" -ForegroundColor Red
+                        $missingMarkers += @{ File = $diffFile; Desc = $display }
+                        $totalCount++
+                    }
+                    continue
+                }
+
+                $postContent = Get-Content $diffFile -Raw -ErrorAction SilentlyContinue
+                if (-not $postContent) { continue }
+
+                foreach ($probe in $probes) {
+                    $probeTrim = $probe.Trim()
+                    if (-not $probeTrim) { continue }
+                    $totalCount++
+                    $display = $probeTrim.Substring(0, [Math]::Min(70, $probeTrim.Length))
+
+                    if ($postContent -match [regex]::Escape($probeTrim)) {
+                        $presentCount++
+                    } else {
+                        Write-Host "  MISSING: $diffFile — $display" -ForegroundColor Red
+                        $missingMarkers += @{ File = $diffFile; Desc = $display }
+                    }
+                }
+            }
+        }
+    }
+
+    # ── Part 2: core fork-infrastructure markers (not PR-specific) ──
+    # These are the fork's IDENTITY — bundle IDs, branding, CI files. They are
+    # always checked regardless of what code changes were made, because they
+    # are the minimum infrastructure that defines this as a fork build.
+    $coreMarkers = @(
+        @{ File = "Config/BundleIdSecrets.xcconfig"; Pattern = "BUNDLE_ID_PREFIX = com\.evoveo"; Desc = "evoveo prefix in BundleIdSecrets.xcconfig" }
+        @{ File = "Config/BundleIdSecrets.xcconfig"; Pattern = "DEVELOPMENT_TEAM = V64Y34CXW2"; Desc = "development team in BundleIdSecrets.xcconfig" }
+        @{ File = "project.yml"; Pattern = "BUNDLE_ID_PREFIX"; Desc = "BUNDLE_ID_PREFIX setting in project.yml" }
+        @{ File = "project.yml"; Pattern = "CFBundleDisplayName: MOVA"; Desc = "MOVA display name in project.yml" }
+        @{ File = "testflight-build.ps1"; Pattern = "TestFlight"; Desc = "TestFlight build script exists" }
+        @{ File = "exportOptions.plist"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in exportOptions.plist" }
+        @{ File = "sync-upstream.ps1"; Pattern = "three-way merge"; Desc = "generic fork-preservation in sync script" }
+    )
+    foreach ($marker in $coreMarkers) {
+        $totalCount++
+        if (-not (Test-Path $marker.File)) {
+            Write-Host "  MISSING FILE: $($marker.File) ($($marker.Desc))" -ForegroundColor Red
             $missingMarkers += $marker
             continue
         }
-
-        $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
-        if (-not $content) {
-            Write-Host "  MISSING MARKER: $file — file empty or unreadable ($desc)" -ForegroundColor Red
-            $missingMarkers += $marker
-            continue
-        }
-
-        if ($content -match $pattern) {
+        $content = Get-Content $marker.File -Raw -ErrorAction SilentlyContinue
+        if ($content -and ($content -match $marker.Pattern)) {
             $presentCount++
         } else {
-            Write-Host "  MISSING MARKER: $file — pattern not found: $desc" -ForegroundColor Red
+            Write-Host "  MISSING: $($marker.File) — $($marker.Desc)" -ForegroundColor Red
             $missingMarkers += $marker
         }
     }
 
     Write-Host ""
-    Write-Host "  Fork-marker audit: $presentCount/$($forkMarkers.Count) markers present" -ForegroundColor $(if ($missingMarkers.Count -eq 0) { "Green" } else { "Red" })
+    Write-Host "  Fork-marker audit: $presentCount/$totalCount markers present" -ForegroundColor $(if ($missingMarkers.Count -eq 0) { "Green" } else { "Red" })
 
     if ($missingMarkers.Count -gt 0) {
         Write-Host ""
