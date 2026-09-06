@@ -72,11 +72,11 @@ enum DataBackup {
     static func runExport(checkpoint: @escaping () async -> Bool) async -> BackupResult {
         let dbPath: String
         do { dbPath = try StorePaths.defaultDatabasePath() }
-        catch { return .failure(String(localized: "Couldn't locate the NOOP database. \(error.localizedDescription)")) }
+        catch { return .failure(String(localized: "Couldn't locate the MOVA database. \(error.localizedDescription)")) }
 
         let dbURL = URL(fileURLWithPath: dbPath)
         guard FileManager.default.fileExists(atPath: dbPath) else {
-            return .failure(String(localized: "There's no NOOP data to export yet. Import or record some first."))
+            return .failure(String(localized: "There's no MOVA data to export yet. Import or record some first."))
         }
 
         // Flush the WAL so the single .sqlite carries everything. Required for ZIP (no sidecar
@@ -87,7 +87,7 @@ enum DataBackup {
 
         #if os(macOS)
         let panel = NSSavePanel()
-        panel.title = String(localized: "Export NOOP backup")
+        panel.title = String(localized: "Export MOVA backup")
         panel.prompt = String(localized: "Export")
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = defaultBackupName()
@@ -138,7 +138,7 @@ enum DataBackup {
     private struct ExportIntegrityFailure: LocalizedError {
         let complaint: String
         var errorDescription: String? {
-            String(localized: "the NOOP database failed its integrity check (SQLite reports: \(complaint)). A backup of it would not restore. Export the WHOOP-format CSV (Settings → Export data) to save what's still readable.")
+            String(localized: "the MOVA database failed its integrity check (SQLite reports: \(complaint)). A backup of it would not restore. Export the WHOOP-format CSV (Settings → Export data) to save what's still readable.")
         }
     }
 
@@ -257,11 +257,11 @@ enum DataBackup {
     static func writeBackup(checkpoint: @escaping () async -> Bool, to dest: URL) async -> BackupResult {
         let dbPath: String
         do { dbPath = try StorePaths.defaultDatabasePath() }
-        catch { return .failure(String(localized: "Couldn't locate the NOOP database. \(error.localizedDescription)")) }
+        catch { return .failure(String(localized: "Couldn't locate the MOVA database. \(error.localizedDescription)")) }
 
         let dbURL = URL(fileURLWithPath: dbPath)
         guard FileManager.default.fileExists(atPath: dbPath) else {
-            return .failure(String(localized: "There's no NOOP data to export yet."))
+            return .failure(String(localized: "There's no MOVA data to export yet."))
         }
         // Flush the WAL into the single file (same requirement as the interactive export: a single-file
         // ZIP has no sidecar fallback, so committed pages still in the WAL would otherwise be absent).
@@ -302,11 +302,11 @@ enum DataBackup {
     static func runImport(allowOversize: Bool = false) async -> BackupResult {
         let dbPath: String
         do { dbPath = try StorePaths.defaultDatabasePath() }
-        catch { return .failure(String(localized: "Couldn't locate the NOOP database. \(error.localizedDescription)")) }
+        catch { return .failure(String(localized: "Couldn't locate the MOVA database. \(error.localizedDescription)")) }
 
         #if os(macOS)
         let panel = NSOpenPanel()
-        panel.title = String(localized: "Import NOOP backup")
+        panel.title = String(localized: "Import MOVA backup")
         panel.prompt = String(localized: "Import")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -346,7 +346,7 @@ enum DataBackup {
     static func restore(from pickedSource: URL) -> BackupResult {
         let dbPath: String
         do { dbPath = try StorePaths.defaultDatabasePath() }
-        catch { return .failure(String(localized: "Couldn't locate the NOOP database. \(error.localizedDescription)")) }
+        catch { return .failure(String(localized: "Couldn't locate the MOVA database. \(error.localizedDescription)")) }
         return restore(from: pickedSource, toDatabaseAt: dbPath)
     }
 
@@ -399,7 +399,7 @@ enum DataBackup {
 
         // Validate: must be a real SQLite database (magic header "SQLite format 3\0").
         guard isSQLiteFile(at: source) else {
-            return .failure(String(localized: "That file isn't a NOOP backup. It doesn't look like a SQLite database."))
+            return .failure(String(localized: "That file isn't a MOVA backup. It doesn't look like a SQLite database."))
         }
 
         // Reject any backup that isn't a clean GRDB (this-app) backup. The magic check passes for ANY
@@ -411,7 +411,7 @@ enum DataBackup {
         let origin = backupOrigin(of: backupTables)
         let holdsData = backupTables.contains("device") || backupTables.contains("hrSample")
         if origin == .android || (origin == .unknown && holdsData) {
-            return .failure(String(localized: "This isn't a NOOP backup from this app. It's missing the migration bookkeeping a NOOP backup carries (it looks like an Android backup or another app's database), and restoring it would strand your store. To move your history across platforms, export the WHOOP-format CSV on the other device (Settings → Export data) and import that here, or import your original WHOOP / Apple Health export."))
+            return .failure(String(localized: "This isn't a MOVA backup from this app. It's missing the migration bookkeeping a MOVA backup carries (it looks like an Android backup or another app's database), and restoring it would strand your store. To move your history across platforms, export the WHOOP-format CSV on the other device (Settings → Export data) and import that here, or import your original WHOOP / Apple Health export."))
         }
 
         // #1014 defence-in-depth: both gates above read only the FIRST pages of the file — the
@@ -545,12 +545,12 @@ enum DataBackup {
         }
     }
 
-    /// "NOOP-backup-2026-06-07.noopbak"
+    /// "MOVA-backup-2026-06-07.noopbak"
     private static func defaultBackupName() -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
-        return "NOOP-backup-\(f.string(from: Date())).noopbak"
+        return "MOVA-backup-\(f.string(from: Date())).noopbak"
     }
 
     private static func timestamp() -> String {

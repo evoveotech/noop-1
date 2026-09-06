@@ -320,7 +320,7 @@ struct LiveView: View {
                 .font(StrandFont.headline)
                 .foregroundStyle(StrandPalette.textPrimary)
             Text(activeConnection
-                 ? "Start a workout when the stream matters. NOOP records the interval, HR, peak, average and effort from the same live feed."
+                 ? "Start a workout when the stream matters. MOVA records the interval, HR, peak, average and effort from the same live feed."
                  : "Connect the strap first, then mark a workout from the live stream.")
                 .font(StrandFont.subhead)
                 .foregroundStyle(StrandPalette.textSecondary)

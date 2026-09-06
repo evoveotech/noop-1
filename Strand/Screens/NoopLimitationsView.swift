@@ -1,7 +1,7 @@
 import SwiftUI
 import StrandDesign
 
-// MARK: - NoopLimitationsView — "what NOOP can (and can't) read off each strap"
+// MARK: - NoopLimitationsView — "what MOVA can (and can't) read off each strap"
 //
 // The iOS/macOS twin of Android's NoopLimitationsScreen: a plain tri-state capability grid listing every
 // metric NOOP surfaces and whether it comes live off a WHOOP 4.0 vs a 5.0/MG. Marks mirror the
@@ -77,7 +77,7 @@ struct NoopLimitationsView: View {
     ]
 
     var body: some View {
-        ScreenScaffold(title: "NOOP Limitations", subtitle: "What each WHOOP can read") {
+        ScreenScaffold(title: "MOVA Limitations", subtitle: "What each WHOOP can read") {
             tableCard
             legendCard
         }
@@ -88,7 +88,7 @@ struct NoopLimitationsView: View {
     private var tableCard: some View {
         NoopCard {
             VStack(alignment: .leading, spacing: 14) {
-                Text("WHAT NOOP READS").font(StrandFont.overline)
+                Text("WHAT MOVA READS").font(StrandFont.overline)
                     .tracking(StrandFont.overlineTracking)
                     .foregroundStyle(StrandPalette.textTertiary)
                 // Column header.

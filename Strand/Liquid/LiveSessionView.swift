@@ -171,7 +171,7 @@ struct LiveSessionView: View {
     }
 
     /// Breathing is the "on track" signal: only in band, only once active, never when anything is
-    /// asking for quiet (Reduce Motion, Low Power Mode, or "Reduce motion in NOOP").
+    /// asking for quiet (Reduce Motion, Low Power Mode, or "Reduce motion in MOVA").
     private var isBreathing: Bool {
         !motion.poseStill(reduceMotion)
             && runner.output?.status == .active

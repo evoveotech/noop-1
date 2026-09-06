@@ -103,13 +103,13 @@ struct SettingsView: View {
         return String(localized: "The ECG gate needs an iPhone or Android. A Mac can't form the encrypted bond a 5/MG requires.")
         #else
         if !live.encryptedBond {
-            return String(localized: "Needs the full encrypted bond: close the official WHOOP app and pair the strap to NOOP first (a live-HR-only link can't carry a config write).")
+            return String(localized: "Needs the full encrypted bond: close the official WHOOP app and pair the strap to MOVA first (a live-HR-only link can't carry a config write).")
         }
         if !ecgVariantIsMG {
             // A nil / non-MG variant lands here too, and deliberately: an unattested strap is not an MG.
-            return String(localized: "Waiting for your strap to identify itself as an MG. Only a WHOOP MG has ECG electrodes, so NOOP won't write this key to anything else.")
+            return String(localized: "Waiting for your strap to identify itself as an MG. Only a WHOOP MG has ECG electrodes, so MOVA won't write this key to anything else.")
         }
-        return String(localized: "One tap writes the key; NOOP then reads it back off the strap and reports the value it actually stores — the write's own \"success\" is not treated as proof.")
+        return String(localized: "One tap writes the key; MOVA then reads it back off the strap and reports the value it actually stores — the write's own \"success\" is not treated as proof.")
         #endif
     }
 
@@ -214,7 +214,7 @@ struct SettingsView: View {
     @AppStorage(SkyBehindCardsPrefs.enabledKey) private var skyBehindCards = true
     // Card-surface opacity percent (100 = solid). Reactive — moving the slider live-updates every card.
     @AppStorage(CardAppearancePrefs.opacityKey) private var cardOpacityPercent = CardAppearancePrefs.defaultPercent
-    // "Reduce motion in NOOP" (default OFF): pose every looping animation still and stop the decorative
+    // "Reduce motion in MOVA" (default OFF): pose every looping animation still and stop the decorative
     // tilt sensor, without needing system Low Power Mode or system Reduce Motion. Apple-only so far —
     // Android has no such toggle yet and its gate reads two signals, not three (#941).
     @AppStorage(QuietMotionPrefs.enabledKey) private var quietMotion = false
@@ -292,7 +292,7 @@ struct SettingsView: View {
     /// "How your scores work" explainer sheet, reachable any time from About.
     @State private var showScoringGuide = false
 
-    /// "How NOOP works" primer sheet (the four-section explainability primer), reachable any
+    /// "How MOVA works" primer sheet (the four-section explainability primer), reachable any
     /// time from About — covers how sleep is sorted, how scores + calibration work, what
     /// recording means, and where the provenance badges come from.
     @State private var showHowNoopWorks = false
@@ -327,7 +327,7 @@ struct SettingsView: View {
 
     var body: some View {
         ScreenScaffold(title: "Settings",
-                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(Platform.deviceNounPhrase).",
+                       subtitle: "Your numbers, your strap, and how MOVA works. All on \(Platform.deviceNounPhrase).",
                        // The day-of-sky liquid backdrop, matching Today / Health / Sleep / Trends / Devices:
                        // a fixed, full-bleed time-of-day sky behind the scroll content (it does not scroll).
                        // Settings' own frosted cards sit on the dark canvas below the sky band, unchanged.
@@ -391,7 +391,7 @@ struct SettingsView: View {
             Button("Clear flags on strap") { model.ble.disableWhoop5DeepData() }
             Button("Just stop sending", role: .cancel) { }
         } message: {
-            Text("Turning this switch off only stops NOOP sending the unlock. The flags it already wrote stay on the strap until something clears them. NOOP can write the off value to all 16 now and read each one back so you can see what the strap actually stores. Needs the strap connected and bonded.")
+            Text("Turning this switch off only stops MOVA sending the unlock. The flags it already wrote stay on the strap until something clears them. MOVA can write the off value to all 16 now and read each one back so you can see what the strap actually stores. Needs the strap connected and bonded.")
         }
         .confirmationDialog("Mark optical experiment phase",
                             isPresented: $showOpticalPhasePicker, titleVisibility: .visible) {
@@ -585,7 +585,7 @@ struct SettingsView: View {
                             .accessibilityLabel("Step calibration, \(String(format: "%.1f", profile.stepTicksPerStep)) counter ticks per step")
                     }
                 }
-                Text("Counter ticks per step. Leave at 1.0 unless your steps run high. On a WHOOP 5/MG they can run very high (10× or more), so this goes up to 30. Walk a known 1,000 steps and divide NOOP's count by the real count to get your value.")
+                Text("Counter ticks per step. Leave at 1.0 unless your steps run high. On a WHOOP 5/MG they can run very high (10× or more), so this goes up to 30. Walk a known 1,000 steps and divide MOVA's count by the real count to get your value.")
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -612,7 +612,7 @@ struct SettingsView: View {
                 }
                 .buttonStyle(LiquidPressStyle())
                 .accessibilityLabel("Steps estimate calibration. \(stepsCalibrationSummary). Opens the calibration screen.")
-                Text("For a WHOOP 4.0, which sends no step count: NOOP estimates steps from motion, calibrated to your phone. Tap to see how close it is and adjust it.")
+                Text("For a WHOOP 4.0, which sends no step count: MOVA estimates steps from motion, calibrated to your phone. Tap to see how close it is and adjust it.")
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1177,7 +1177,7 @@ struct SettingsView: View {
                     .accessibilityLabel("Language")
                     .onChangeCompat(of: appLanguageRaw) { AppLanguage.apply($0) }
                 }
-                Text("Language changes take effect after you reopen NOOP.")
+                Text("Language changes take effect after you reopen MOVA.")
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1328,7 +1328,7 @@ struct SettingsView: View {
                 // sensor, WITHOUT requiring system Low Power Mode. Off by default; system Reduce Motion
                 // and Low Power Mode already force the same behaviour, this is the third, in-app signal.
                 Toggle(isOn: $quietMotion) {
-                    Text("Reduce motion in NOOP")
+                    Text("Reduce motion in MOVA")
                         .font(StrandFont.subhead)
                         .foregroundStyle(StrandPalette.textPrimary)
                 }
@@ -1454,7 +1454,7 @@ struct SettingsView: View {
         SettingsSection(
             icon: "antenna.radiowaves.left.and.right",
             title: "Strap",
-            blurb: "NOOP pairs directly with your WHOOP over Bluetooth: no WHOOP app, no cloud."
+            blurb: "MOVA pairs directly with your WHOOP over Bluetooth: no WHOOP app, no cloud."
         ) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
@@ -1653,7 +1653,7 @@ struct SettingsView: View {
             await model.repo.refresh()
         }
         backupAlertTitle = String(localized: "Charge baseline recalibrating")
-        backupAlertMessage = String(localized: "NOOP will re-learn your baseline from tonight's data onward. Your history is kept, and it takes a few nights to settle.")
+        backupAlertMessage = String(localized: "MOVA will re-learn your baseline from tonight's data onward. Your history is kept, and it takes a few nights to settle.")
         showBackupAlert = true
     }
 
@@ -1721,7 +1721,7 @@ struct SettingsView: View {
                 .tint(StrandPalette.accent)
                 .accessibilityHint("Offers to save a workout when it spots sustained elevated heart rate")
 
-                Text("After a sync, NOOP looks over your recent heart rate for a sustained, raised stretch that looks like exercise and offers to save it. It only ever suggests. Nothing is saved until you tap Save, and you can dismiss any suggestion. Deliberately conservative, so the odd workout may be missed. On \(Platform.deviceNounPhrase) only.")
+                Text("After a sync, MOVA looks over your recent heart rate for a sustained, raised stretch that looks like exercise and offers to save it. It only ever suggests. Nothing is saved until you tap Save, and you can dismiss any suggestion. Deliberately conservative, so the odd workout may be missed. On \(Platform.deviceNounPhrase) only.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1771,7 +1771,7 @@ struct SettingsView: View {
         SettingsSection(
             icon: "waveform.path.ecg",
             title: "HRV",
-            blurb: "Tune how NOOP captures and windows your heart-rate-variability reading."
+            blurb: "Tune how MOVA captures and windows your heart-rate-variability reading."
         ) {
             VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
                 // MARK: Continuous HRV capture — keep the dense beat-to-beat (R-R) stream armed 24/7.
@@ -1783,7 +1783,7 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .tint(StrandPalette.accent)
                 .onChangeCompat(of: continuousHrvEnabled) { on in model.ble.setKeepRealtimeForData(on) }
-                Text("Keeps the detailed beat-to-beat heart-rate stream running all day and night, not just while a live screen is open, so NOOP captures much more for overnight HRV, recovery and sleep. Uses more battery: your strap streams heart rate continuously while connected.")
+                Text("Keeps the detailed beat-to-beat heart-rate stream running all day and night, not just while a live screen is open, so MOVA captures much more for overnight HRV, recovery and sleep. Uses more battery: your strap streams heart rate continuously while connected.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1827,7 +1827,7 @@ struct SettingsView: View {
                         Task { await model.intelligence.analyzeRecent(); await model.repo.refresh() }
                     }
                 }
-                Text("Whole night is NOOP's default measure; Deep sleep pools HRV over slow-wave sleep only, reading lower and matching WHOOP. Switching re-scores your recent nights over the new window and takes effect right away once you have a few nights of data.")
+                Text("Whole night is MOVA's default measure; Deep sleep pools HRV over slow-wave sleep only, reading lower and matching WHOOP. Switching re-scores your recent nights over the new window and takes effect right away once you have a few nights of data.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1908,7 +1908,7 @@ struct SettingsView: View {
         SettingsSection(
             icon: "bed.double.fill",
             title: "Sleep staging",
-            blurb: "How NOOP splits a night into light / deep / REM. The V2 recipe is the default; turn it off to fall back to the older V1 staging."
+            blurb: "How MOVA splits a night into light / deep / REM. The V2 recipe is the default; turn it off to fall back to the older V1 staging."
         ) {
             VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
                 Toggle(isOn: $experimentalSleepV2Enabled) {
@@ -1959,7 +1959,7 @@ struct SettingsView: View {
         return String(localized: "Deep data (R22) needs an iPhone or Android. A Mac can't form the encrypted bond a 5/MG requires.")
         #else
         if !live.encryptedBond {
-            return String(localized: "Needs the full encrypted bond: close the official WHOOP app and pair the strap to NOOP first (a live-HR-only link can't carry the unlock).")
+            return String(localized: "Needs the full encrypted bond: close the official WHOOP app and pair the strap to MOVA first (a live-HR-only link can't carry the unlock).")
         }
         return live.worn
             ? String(localized: "Wear the strap, tap once, then let it sync and share your strap log.")
@@ -1990,9 +1990,9 @@ struct SettingsView: View {
         return String(localized: "Turning deep data back off needs an iPhone or Android. A Mac can't form the encrypted bond a 5/MG requires.")
         #else
         if !live.encryptedBond {
-            return String(localized: "Needs the full encrypted bond: close the official WHOOP app and pair the strap to NOOP first (a live-HR-only link can't carry the write).")
+            return String(localized: "Needs the full encrypted bond: close the official WHOOP app and pair the strap to MOVA first (a live-HR-only link can't carry the write).")
         }
-        return String(localized: "Writes the off value to all 16 flags and reads each one back, so you see what the strap stores rather than just that it acked. The off value is inferred from the flag NOOP already turns off this way for Garmin broadcast — it has never been seen on an R22 flag, so NOOP tries one flag first and stops if the strap refuses it. Clearing the flags is not the same as watching the deep records stop: check that by syncing afterwards.")
+        return String(localized: "Writes the off value to all 16 flags and reads each one back, so you see what the strap stores rather than just that it acked. The off value is inferred from the flag MOVA already turns off this way for Garmin broadcast — it has never been seen on an R22 flag, so MOVA tries one flag first and stops if the strap refuses it. Clearing the flags is not the same as watching the deep records stop: check that by syncing afterwards.")
         #endif
     }
 
@@ -2010,7 +2010,7 @@ struct SettingsView: View {
                 }
                 .toggleStyle(.switch)
                 .tint(StrandPalette.accent)
-                Text("On a 5/MG connection NOOP will send a puffin realtime-stream request after the handshake, and log what comes back. If you have a 5/MG strap, turning this on and sharing your strap log helps map the protocol. No effect on WHOOP 4.0.")
+                Text("On a 5/MG connection MOVA will send a puffin realtime-stream request after the handshake, and log what comes back. If you have a 5/MG strap, turning this on and sharing your strap log helps map the protocol. No effect on WHOOP 4.0.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2029,7 +2029,7 @@ struct SettingsView: View {
                 // strap kept every flag the enable sequence set while the UI implied it had been undone.
                 // Now it offers the real undo. Turning it ON still writes nothing until the button is tapped.
                 .onChangeCompat(of: deepDataEnabled) { on in if !on { confirmingDeepDataDisable = true } }
-                Text("Legacy R22 feature-flag experiment. The strap accepts these writes, but NOOP has not observed them enabling a separate live stream. This is not required for normal WHOOP 5/MG support or for the Raw Data Collector. It writes persistent strap settings and may do nothing on your firmware.")
+                Text("Legacy R22 feature-flag experiment. The strap accepts these writes, but MOVA has not observed them enabling a separate live stream. This is not required for normal WHOOP 5/MG support or for the Raw Data Collector. It writes persistent strap settings and may do nothing on your firmware.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2177,7 +2177,7 @@ struct SettingsView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(StrandPalette.statusWarning)
                             .accessibilityHidden(true)
-                        Text("This writes a setting that STAYS ON YOUR STRAP until you change it back — it isn't an app preference, and closing NOOP won't undo it. \"Turn gate off\" below writes '0' again, in one tap. Only this one key is ever written; the other six your strap listed are never touched.")
+                        Text("This writes a setting that STAYS ON YOUR STRAP until you change it back — it isn't an app preference, and closing MOVA won't undo it. \"Turn gate off\" below writes '0' again, in one tap. Only this one key is ever written; the other six your strap listed are never touched.")
                             .font(StrandFont.caption)
                             .foregroundStyle(StrandPalette.statusWarning)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2225,7 +2225,7 @@ struct SettingsView: View {
                 // `ecgMayBeRunning` so there is still a route once the link is back.
                 // `reportsResult: false`: switching a setting off must not pop the Devices result sheet.
                 .onChangeCompat(of: ecgEnabled) { on in if !on { model.ecgStopCapture(reportsResult: false) } }
-                Text("The WHOOP MG has ECG electrodes in its clasp. This unlocks a gated, hand-run probe on the Devices screen that asks the strap to start its ECG subsystem and logs whatever comes back. MG only — a plain WHOOP 5.0 has no electrodes, and NOOP will refuse to send unless your strap identifies itself as an MG. Nobody has confirmed a strap honours these commands, so it may simply do nothing. Turn on “Record puffin frames to a file” below first if you want a complete byte-level capture to share.")
+                Text("The WHOOP MG has ECG electrodes in its clasp. This unlocks a gated, hand-run probe on the Devices screen that asks the strap to start its ECG subsystem and logs whatever comes back. MG only — a plain WHOOP 5.0 has no electrodes, and MOVA will refuse to send unless your strap identifies itself as an MG. Nobody has confirmed a strap honours these commands, so it may simply do nothing. Turn on “Record puffin frames to a file” below first if you want a complete byte-level capture to share.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2235,7 +2235,7 @@ struct SettingsView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(StrandPalette.statusWarning)
                             .accessibilityHidden(true)
-                        Text("NOOP is not a medical device and this is not an ECG test. Anything the strap reports here — including any heart-rhythm classification it happens to send — is unvalidated instrumentation for protocol research, not a measurement and not a diagnosis. Never use it to make a decision about your health. If you have symptoms or are worried about your heart, talk to a doctor.")
+                        Text("MOVA is not a medical device and this is not an ECG test. Anything the strap reports here — including any heart-rhythm classification it happens to send — is unvalidated instrumentation for protocol research, not a measurement and not a diagnosis. Never use it to make a decision about your health. If you have symptoms or are worried about your heart, talk to a doctor.")
                             .font(StrandFont.caption)
                             .foregroundStyle(StrandPalette.statusWarning)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2261,7 +2261,7 @@ struct SettingsView: View {
                     Text("Optical block experiment")
                         .font(StrandFont.subhead)
                         .foregroundStyle(StrandPalette.textPrimary)
-                    Text("Mark the start of each physical phase while wearing or handling the strap. NOOP aligns the marker to the timestamp inside delayed history buffers, then the offline analyzer compares block activation, header bytes and raw ADC changes. It does not assume a wavelength or calculate SpO₂/BP.")
+                    Text("Mark the start of each physical phase while wearing or handling the strap. MOVA aligns the marker to the timestamp inside delayed history buffers, then the offline analyzer compares block activation, header bytes and raw ADC changes. It does not assume a wavelength or calculate SpO₂/BP.")
                         .font(StrandFont.caption)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2371,7 +2371,7 @@ struct SettingsView: View {
         SettingsSection(
             icon: "doc.text.magnifyingglass",
             title: "Diagnostics",
-            blurb: "A read-only export of the decoded sensor streams NOOP already stores. Works on any strap. Nothing is written to your device, and nothing is uploaded."
+            blurb: "A read-only export of the decoded sensor streams MOVA already stores. Works on any strap. Nothing is written to your device, and nothing is uploaded."
         ) {
             VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
                 // MARK: Export raw sensor data (CSV) — a read-only diagnostic over the decoded streams
@@ -2567,7 +2567,7 @@ struct SettingsView: View {
         SettingsSection(
             icon: "externaldrive.fill",
             title: "Backup & restore",
-            blurb: "Move all your NOOP data to another machine. Export saves everything (history, sleeps, workouts, settings) to a single file you can copy across; import replaces \(Platform.deviceNounPhrase)'s data with a backup."
+            blurb: "Move all your MOVA data to another machine. Export saves everything (history, sleeps, workouts, settings) to a single file you can copy across; import replaces \(Platform.deviceNounPhrase)'s data with a backup."
         ) {
             VStack(alignment: .leading, spacing: NoopMetrics.space4) {
                 // Three labelled buttons must share a narrow iPhone row without wrapping mid-word
@@ -2616,7 +2616,7 @@ struct SettingsView: View {
                         .foregroundStyle(StrandPalette.textTertiary)
                         .font(.system(size: 13))
                         .accessibilityHidden(true)
-                    Text("Importing overwrites everything currently on \(Platform.deviceNounPhrase). Your old data is kept in a side file just in case. NOOP needs a relaunch for an import to take effect. Export CSV writes a WHOOP-format zip of your days, sleeps, workouts and journal that re-imports into NOOP on Mac, iPhone, or Android. On-device computed rows are marked APPROXIMATE in its Source column; the full backup stays the lossless restore path.")
+                    Text("Importing overwrites everything currently on \(Platform.deviceNounPhrase). Your old data is kept in a side file just in case. MOVA needs a relaunch for an import to take effect. Export CSV writes a WHOOP-format zip of your days, sleeps, workouts and journal that re-imports into MOVA on Mac, iPhone, or Android. On-device computed rows are marked APPROXIMATE in its Source column; the full backup stays the lossless restore path.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2702,7 +2702,7 @@ struct SettingsView: View {
                 return
             case .exported(let url):
                 backupAlertTitle = String(localized: "CSV exported")
-                backupAlertMessage = String(localized: "Saved to \(url.lastPathComponent). The zip re-imports into NOOP (Data Sources → WHOOP Export) on any Mac, iPhone, or Android device.")
+                backupAlertMessage = String(localized: "Saved to \(url.lastPathComponent). The zip re-imports into MOVA (Data Sources → WHOOP Export) on any Mac, iPhone, or Android device.")
                 showBackupAlert = true
             case .failure(let message):
                 backupAlertTitle = String(localized: "Export problem")
@@ -2729,15 +2729,15 @@ struct SettingsView: View {
             let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
             let cap = ByteCountFormatter.string(fromByteCount: limit, countStyle: .file)
             backupAlertTitle = String(localized: "Backup exported")
-            backupAlertMessage = String(localized: "Saved to \(url.lastPathComponent). Your database is \(size), over the \(cap) NOOP restores without asking — the backup is complete and valid, and restoring it will ask you to confirm once.")
+            backupAlertMessage = String(localized: "Saved to \(url.lastPathComponent). Your database is \(size), over the \(cap) MOVA restores without asking — the backup is complete and valid, and restoring it will ask you to confirm once.")
             showBackupAlert = true
         case .restoreTooLarge(let name, let limit):
             let cap = ByteCountFormatter.string(fromByteCount: limit, countStyle: .file)
-            oversizeRestoreMessage = String(localized: "\(name) is larger than the \(cap) NOOP restores without asking. That limit guards against a malicious archive expanding to fill this \(Platform.deviceNoun) — a backup you exported yourself is not that. Restoring it needs the space the database will take. You'll be asked to choose the file again.")
+            oversizeRestoreMessage = String(localized: "\(name) is larger than the \(cap) MOVA restores without asking. That limit guards against a malicious archive expanding to fill this \(Platform.deviceNoun) — a backup you exported yourself is not that. Restoring it needs the space the database will take. You'll be asked to choose the file again.")
             showOversizeRestoreConfirm = true
         case .imported:
             backupAlertTitle = String(localized: "Backup imported")
-            backupAlertMessage = String(localized: "Your data has been restored. Quit and reopen NOOP for it to take effect.")
+            backupAlertMessage = String(localized: "Your data has been restored. Quit and reopen MOVA for it to take effect.")
             showBackupAlert = true
         case .failure(let message):
             backupAlertTitle = String(localized: "Backup problem")
@@ -2758,11 +2758,11 @@ struct SettingsView: View {
         SettingsSection(
             icon: "info.circle.fill",
             title: "About",
-            blurb: "NOOP: all your data, none of the cloud."
+            blurb: "MOVA: all your data, none of the cloud."
         ) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
-                    Text("NOOP")
+                    Text("MOVA")
                         .font(StrandFont.title2)
                         .foregroundStyle(StrandPalette.textPrimary)
                     StatePill("v\(bundleVersionString)", tone: .neutral, showsDot: false)
@@ -2783,7 +2783,7 @@ struct SettingsView: View {
                             .foregroundStyle(StrandPalette.accent)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("How NOOP works")
+                            Text("How MOVA works")
                                 .font(StrandFont.body)
                                 .foregroundStyle(StrandPalette.textPrimary)
                             Text("Sleep sorting, scores, recording, and where your numbers come from.")
@@ -2800,7 +2800,7 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(LiquidPressStyle())
-                .accessibilityLabel("How NOOP works")
+                .accessibilityLabel("How MOVA works")
 
                 // How your scores work — the honest explainer for Charge / Effort / Rest and the
                 // confidence labels. Always reachable here, mirroring the "What's new" affordance.
@@ -2847,7 +2847,7 @@ struct SettingsView: View {
                             Text("About Apple Watch data")
                                 .font(StrandFont.body)
                                 .foregroundStyle(StrandPalette.textPrimary)
-                            Text("Use NOOP with just an Apple Watch. What it's great at, and where it's lighter than a strap.")
+                            Text("Use MOVA with just an Apple Watch. What it's great at, and where it's lighter than a strap.")
                                 .font(StrandFont.footnote)
                                 .foregroundStyle(StrandPalette.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -2877,7 +2877,7 @@ struct SettingsView: View {
                             Text("Storage")
                                 .font(StrandFont.body)
                                 .foregroundStyle(StrandPalette.textPrimary)
-                            Text("Where NOOP's on-device space is going, and a one-tap clean-up.")
+                            Text("Where MOVA's on-device space is going, and a one-tap clean-up.")
                                 .font(StrandFont.footnote)
                                 .foregroundStyle(StrandPalette.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -2945,7 +2945,7 @@ struct SettingsView: View {
                             Text("Check automatically")
                                 .font(StrandFont.subhead)
                                 .foregroundStyle(StrandPalette.textPrimary)
-                            Text("Once a day, NOOP asks GitHub for the latest version number and puts a note in Updates if there's a newer one. Nothing about you is sent, and it never installs anything.")
+                            Text("Once a day, MOVA asks GitHub for the latest version number and puts a note in Updates if there's a newer one. Nothing about you is sent, and it never installs anything.")
                                 .font(StrandFont.footnote)
                                 .foregroundStyle(StrandPalette.textSecondary)
                         }
@@ -3018,7 +3018,7 @@ struct SettingsView: View {
                 }
                 .accessibilityLabel("Project home and source code on GitHub")
 
-                Text("A standalone companion for your WHOOP. Everything stays on this device: your history, your live stream, your numbers. Nothing is uploaded. NOOP is an independent, experimental project, not the WHOOP app.")
+                Text("A standalone companion for your WHOOP. Everything stays on this device: your history, your live stream, your numbers. Nothing is uploaded. MOVA is an independent, experimental project, not the WHOOP app.")
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3029,7 +3029,7 @@ struct SettingsView: View {
                         .foregroundStyle(StrandPalette.statusWarning)
                         .font(.system(size: 13))
                         .accessibilityHidden(true)
-                    Text("NOOP is not a medical device. It is for informational and personal-insight purposes only and is not intended to diagnose, treat, cure or prevent any condition. Talk to a clinician for medical advice.")
+                    Text("MOVA is not a medical device. It is for informational and personal-insight purposes only and is not intended to diagnose, treat, cure or prevent any condition. Talk to a clinician for medical advice.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3107,7 +3107,7 @@ struct SettingsView: View {
         .accessibilityLabel("Diagnostics")
     }
 
-    /// Calm, honest "what to expect running NOOP on iPhone" callout — sideloading reality, re-sign
+    /// Calm, honest "what to expect running MOVA on iPhone" callout — sideloading reality, re-sign
     /// cadence, the unlock-after-reboot (#222) note, background-BLE limits, and beta-iOS caveat. Surfaces
     /// the live sideload-cert expiry when we can read it, with a gentle warning under ~3 days.
     private var iphoneExpectations: some View {
@@ -3118,14 +3118,14 @@ struct SettingsView: View {
                 Image(systemName: "iphone.gen3")
                     .foregroundStyle(StrandPalette.accent)
                     .accessibilityHidden(true)
-                Text("Using NOOP on iPhone")
+                Text("Using MOVA on iPhone")
                     .font(StrandFont.subhead.weight(.semibold))
                     .foregroundStyle(StrandPalette.textPrimary)
             }
 
             iphoneExpectationLine(String(localized: "This is a sideloaded build, installed outside the App Store. It needs re-signing periodically: roughly every 7 days on a free Apple ID, about a year on a paid developer account."))
-            iphoneExpectationLine(String(localized: "After your iPhone reboots, unlock it once. Until you do, iOS keeps NOOP's files locked (Data Protection), so new history can't be written or synced."))
-            iphoneExpectationLine(String(localized: "Background Bluetooth has OS limits: iOS may pause NOOP when it's not in the foreground, so keep it open while syncing a fresh strap."))
+            iphoneExpectationLine(String(localized: "After your iPhone reboots, unlock it once. Until you do, iOS keeps MOVA's files locked (Data Protection), so new history can't be written or synced."))
+            iphoneExpectationLine(String(localized: "Background Bluetooth has OS limits: iOS may pause MOVA when it's not in the foreground, so keep it open while syncing a fresh strap."))
             iphoneExpectationLine(String(localized: "On a beta version of iOS, things can break that work on the release build."))
 
             if let days = expiry {
@@ -3514,12 +3514,12 @@ struct StepsCalibrationSheet: View {
                     .font(StrandFont.headline)
                     .foregroundStyle(StrandPalette.textPrimary)
                 Text(is5MG
-                     ? String(localized: "NOOP estimates your steps from your WHOOP's stored motion, calibrated to your phone's step count. It's an estimate, not a hardware step counter; normal WHOOP 5/MG history sync supplies the motion data.")
-                     : String(localized: "NOOP estimates your steps from your WHOOP's motion, calibrated to your phone's step count. It's an estimate, not a step counter. A WHOOP 4.0 doesn't transmit steps."))
+                     ? String(localized: "MOVA estimates your steps from your WHOOP's stored motion, calibrated to your phone's step count. It's an estimate, not a hardware step counter; normal WHOOP 5/MG history sync supplies the motion data.")
+                     : String(localized: "MOVA estimates your steps from your WHOOP's motion, calibrated to your phone's step count. It's an estimate, not a step counter. A WHOOP 4.0 doesn't transmit steps."))
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("On the days your phone also counted steps, NOOP learns how much your motion maps to steps, then applies that to the strap-only days. The more matching days it has, the more it trusts the estimate.")
+                Text("On the days your phone also counted steps, MOVA learns how much your motion maps to steps, then applies that to the strap-only days. The more matching days it has, the more it trusts the estimate.")
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3555,20 +3555,20 @@ struct StepsCalibrationSheet: View {
     /// The "why it's empty" line — a 5/MG needs the deep-data unlock before it streams motion at all.
     private var noMotionLead: String {
         if is5MG {
-            return String(localized: "We're not seeing motion from your WHOOP 5.0 / MG yet. Keep NOOP connected and let strap history finish syncing; the experimental R22 flags are not required. Account or Apple Health imports do not contain the raw strap motion this estimate needs.")
+            return String(localized: "We're not seeing motion from your WHOOP 5.0 / MG yet. Keep MOVA connected and let strap history finish syncing; the experimental R22 flags are not required. Account or Apple Health imports do not contain the raw strap motion this estimate needs.")
         }
-        return String(localized: "We're not seeing any motion from your strap yet. Steps are estimated from your WHOOP's banked motion history, so your strap needs to sync that history before NOOP has anything to count.")
+        return String(localized: "We're not seeing any motion from your strap yet. Steps are estimated from your WHOOP's banked motion history, so your strap needs to sync that history before MOVA has anything to count.")
     }
 
     /// The "what to do" line — 5/MG points at the deep-data toggle (unless it's already on, then just sync).
     private var noMotionAction: String {
         if is5MG && !deepDataEnabled {
-            return String(localized: "Open NOOP near the strap and let WHOOP 5/MG history finish syncing. The step estimate and calibration fill in once enough stored motion has arrived; the legacy R22 experiment is not required.")
+            return String(localized: "Open MOVA near the strap and let WHOOP 5/MG history finish syncing. The step estimate and calibration fill in once enough stored motion has arrived; the legacy R22 experiment is not required.")
         }
         if is5MG {
-            return String(localized: "Deep data is on — open NOOP near your strap and let it sync its motion history (a full first-run sync can take a while). Once a day or two of motion lands, your step estimate and the calibration below fill in.")
+            return String(localized: "Deep data is on — open MOVA near your strap and let it sync its motion history (a full first-run sync can take a while). Once a day or two of motion lands, your step estimate and the calibration below fill in.")
         }
-        return String(localized: "Open NOOP near your strap and let it catch up (a full history sync can take a while on first run). Once a day or two of motion lands, your step estimate and the calibration below will start to fill in.")
+        return String(localized: "Open MOVA near your strap and let it catch up (a full history sync can take a while on first run). Once a day or two of motion lands, your step estimate and the calibration below will start to fill in.")
     }
 
     /// The current calibration read-out: coefficient, sample days, and a Low/Medium/High confidence —
@@ -3626,7 +3626,7 @@ struct StepsCalibrationSheet: View {
                         .headline)
                         .font(StrandFont.bodyNumber)
                         .foregroundStyle(StrandPalette.accent)
-                    Text("These are the days where your phone also counted steps, so NOOP can learn how your motion maps to steps. Or set the coefficient manually below.")
+                    Text("These are the days where your phone also counted steps, so MOVA can learn how your motion maps to steps. Or set the coefficient manually below.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3643,7 +3643,7 @@ struct StepsCalibrationSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Estimated vs your phone").strandOverline()
                 if comparison.isEmpty {
-                    Text("No days yet where both NOOP and your phone counted steps. Once your phone logs a few days alongside the strap, they'll appear here so you can see how close the estimate is.")
+                    Text("No days yet where both MOVA and your phone counted steps. Once your phone logs a few days alongside the strap, they'll appear here so you can see how close the estimate is.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)

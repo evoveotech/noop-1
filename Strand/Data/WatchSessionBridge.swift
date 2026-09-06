@@ -159,7 +159,7 @@ final class WatchSessionBridge: NSObject, ObservableObject {
         // shows a cal marker, not a dash that looks like an outage. We treat "no number for the anchor
         // day" as calibrating only when there is at least some day data to calibrate FROM. With no day
         // at all (a fresh, never-synced phone) the flags stay false and the watch shows its neutral
-        // "open NOOP on your iPhone" empty state instead of implying calibration is underway.
+        // "open MOVA on your iPhone" empty state instead of implying calibration is underway.
         let hasAnyDay = day != nil
         let charge = day?.recovery
         let effort = day?.strain

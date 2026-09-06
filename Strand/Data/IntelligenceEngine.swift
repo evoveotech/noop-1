@@ -74,7 +74,7 @@ final class IntelligenceEngine: ObservableObject {
     /// on-device numbers, but the WHOLE-DASHBOARD value for the same day can come from an IMPORTED row
     /// that won the per-day merge (imports win field-by-field over computed , see Repository.mergeDaily).
     /// We resolve the REAL provenance so the card's badge tells a strap-scored night apart from an
-    /// imported one, instead of always claiming "NOOP-computed". (Sleep overhaul §2.6 honesty fix.)
+    /// imported one, instead of always claiming "MOVA-computed". (Sleep overhaul §2.6 honesty fix.)
     /// The `stages=` token of the per-day sleep diagnostic line (#386): `<deep>+<rem>+<light>=<sum>` in
     /// rounded minutes when the day carries a full banked stage split, `nil` when any component is
     /// absent (an unstaged night, or an imported day that only brought a total). The sum is printed
@@ -247,7 +247,7 @@ final class IntelligenceEngine: ObservableObject {
     /// HR , the lowest SUSTAINED 5-min in-bed level (SleepStager picks the min 5-min rolling-mean HR per
     /// session, the day takes the .min() across them) , whereas a "sleeping HR" app reports the night MEAN
     /// over the whole asleep span. The mean always sits at-or-above the floor, so NOOP reading lower is BY
-    /// DESIGN, not a bug; logging both makes a "NOOP RHR is lower than my other app" report explainable
+    /// DESIGN, not a bug; logging both makes a "MOVA RHR is lower than my other app" report explainable
     /// from the strap log. `inBedBpms` is the bpm of every HR sample inside a matched in-bed session (the
     /// SAME span the floor came from, so the two numbers are directly comparable). Empty in-bed → nightMean
     /// is "nil". Counts/bpm only , no timestamps or PII. Pure so it's unit-tested directly and is the SAME
@@ -290,7 +290,7 @@ final class IntelligenceEngine: ObservableObject {
         let meanLog: String = inBedBpms.isEmpty ? "nil"
             : String(Int((Double(inBedBpms.reduce(0, +)) / Double(inBedBpms.count)).rounded()))
         return "rhr day=\(day) floor=\(floor) nightMean=\(meanLog) inBedSamples=\(inBedBpms.count) "
-            + "(floor = WHOOP-style lowest-sustained = NOOP RHR; mean = sleeping-HR-app number)"
+            + "(floor = WHOOP-style lowest-sustained = MOVA RHR; mean = sleeping-HR-app number)"
     }
 
     /// #1244: one line for a day that CLEARED the ≥200-HR gate yet detected NO in-bed session, so the
@@ -1477,7 +1477,7 @@ final class IntelligenceEngine: ObservableObject {
                         ticksPerStep: up.stepTicksPerStep)
                 }
                 // ── RHR floor-vs-mean diagnostic (#691) ────────────────────────────────────────────────
-                // Make the recurring "NOOP's resting HR reads LOWER than my sleeping-HR app" reports
+                // Make the recurring "MOVA's resting HR reads LOWER than my sleeping-HR app" reports
                 // explainable from the strap log instead of a guess. The two numbers measure different
                 // things BY DESIGN, not a bug: NOOP's `restingHr` is the WHOOP-style FLOOR (the lowest
                 // sustained 5-min in-bed level , SleepStager picks the min 5-min rolling-mean HR per session,
@@ -2561,7 +2561,7 @@ final class IntelligenceEngine: ObservableObject {
 
         results = out
         note = out.isEmpty
-            ? "No scored nights yet. Wear the strap with NOOP connected overnight and the engine will score your charge, effort and rest itself, no WHOOP cloud required."
+            ? "No scored nights yet. Wear the strap with MOVA connected overnight and the engine will score your charge, effort and rest itself, no WHOOP cloud required."
             : nil
 
         // Reload the dashboard caches so the freshly computed scores show up immediately. A heal-only

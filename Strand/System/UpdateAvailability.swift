@@ -65,7 +65,7 @@ enum UpdateAvailability {
 
     /// Has the install CAUGHT UP with a version we previously announced?
     ///
-    /// The row says "NOOP 10.7.0 is available". Once the user actually installs 10.7.0 that sentence is
+    /// The row says "MOVA 10.7.0 is available". Once the user actually installs 10.7.0 that sentence is
     /// false, and it sits in the inbox directly beside the What's New row for the same version — an app
     /// telling you to get something you already have. Nothing else prunes it, because the row carries no
     /// version field of its own; the persisted `lastPostedVersion` is what makes this answerable without
@@ -170,11 +170,11 @@ enum UpdateWatch {
             // What's New row beside it. `composeMessage` only assembles what it is handed.
             let body = String(localized: "You're on \(currentVersion). Open Settings and use Check for updates to see what's new and download \(release.version).")
             let sideload = sideloadHint
-                ? String(localized: "AltStore or SideStore can install it for you automatically if you added NOOP's source; a direct .ipa still has to be signed on your device.")
+                ? String(localized: "AltStore or SideStore can install it for you automatically if you added MOVA's source; a direct .ipa still has to be signed on your device.")
                 : nil
             UpdateStore.shared.post(UpdateItem(
                 kind: .newVersion,
-                title: String(localized: "NOOP \(release.version) is available"),
+                title: String(localized: "MOVA \(release.version) is available"),
                 message: UpdateAvailability.composeMessage(body: body,
                                                            sideload: sideload,
                                                            notes: release.notes)))

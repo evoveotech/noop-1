@@ -193,7 +193,7 @@ final class Repository: ObservableObject {
     /// Data Sources "Freshness Pipeline" card so the user can see imported vs computed vs Apple coverage.
     @Published private(set) var freshness: RepositoryFreshness = .empty
     /// Daily metric rows with source provenance, used by vital-sign surfaces that need honest
-    /// "WHOOP import / NOOP computed / Apple Health" captions instead of a silent merged row.
+    /// "WHOOP import / MOVA computed / Apple Health" captions instead of a silent merged row.
     @Published private(set) var vitalRows: [SourcedDailyMetric] = []
     /// Monotonic counter bumped on every successful `refresh()`. Intraday-updating views key their
     /// data load on this so they reload when fresh strap data lands , `today?.day` alone is a stable

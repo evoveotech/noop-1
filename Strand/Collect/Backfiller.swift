@@ -434,7 +434,7 @@ final class Backfiller {
     /// to the Android twin. No em-dash (project rule).
     nonisolated static func futureRtcLine(endUnix: Int, wallNowUnix: Int) -> String {
         let aheadDays = max(0, (endUnix - wallNowUnix)) / 86_400
-        return "Backfill: the strap reported a record dated about \(aheadDays) day(s) in the FUTURE - its clock (RTC) is corrupt, not a NOOP problem. Those records can't be filed onto the right day. Fully charge the strap to 100% and reconnect so it re-syncs its clock; if it persists, forget and re-pair the strap."
+        return "Backfill: the strap reported a record dated about \(aheadDays) day(s) in the FUTURE - its clock (RTC) is corrupt, not a MOVA problem. Those records can't be filed onto the right day. Fully charge the strap to 100% and reconnect so it re-syncs its clock; if it persists, forget and re-pair the strap."
     }
 
     /// #1683: how far BEHIND the wall clock the strap's newest stored record may sit before a sync that
@@ -465,7 +465,7 @@ final class Backfiller {
     /// Byte-identical to the Android twin. No em-dash (project rule).
     nonisolated static func staleRecordLine(newestUnix: Int, wallNowUnix: Int) -> String {
         let ageDays = max(0, wallNowUnix - newestUnix) / 86_400
-        return "Backfill: this sync banked nothing and the strap's newest stored record is about \(ageDays) day(s) old. If you have worn it since then, it has stopped saving history to its flash. NOOP already re-sends the clock on every connect, so charging alone may not be enough: charge to 100% and reconnect, then use Restart strap in Devices, and if that does not help forget and re-pair. If the official WHOOP app is also missing these days, the strap is the cause and not NOOP."
+        return "Backfill: this sync banked nothing and the strap's newest stored record is about \(ageDays) day(s) old. If you have worn it since then, it has stopped saving history to its flash. MOVA already re-sends the clock on every connect, so charging alone may not be enough: charge to 100% and reconnect, then use Restart strap in Devices, and if that does not help forget and re-pair. If the official WHOOP app is also missing these days, the strap is the cause and not MOVA."
     }
 
 
@@ -482,7 +482,7 @@ final class Backfiller {
     /// both platforms; localizing that surface is its own change. No em-dash (project rule).
     nonisolated static func staleRecordBanner(newestUnix: Int, wallNowUnix: Int) -> String {
         let ageDays = max(0, wallNowUnix - newestUnix) / 86_400
-        return "Synced, but your strap handed over no stored history, and its newest saved record is about \(ageDays) day(s) old. If you have been wearing it since then, it has stopped saving to flash. Charge it to 100% and reconnect; NOOP already re-sets its clock every connect, so if that does not help, try Restart strap in Devices, then forget and re-pair. If the official WHOOP app is missing these days too, the strap is the cause and not NOOP."
+        return "Synced, but your strap handed over no stored history, and its newest saved record is about \(ageDays) day(s) old. If you have been wearing it since then, it has stopped saving to flash. Charge it to 100% and reconnect; MOVA already re-sets its clock every connect, so if that does not help, try Restart strap in Devices, then forget and re-pair. If the official WHOOP app is missing these days too, the strap is the cause and not MOVA."
     }
 
     /// Commit one HISTORY_END chunk: (persist decoded → enqueueRaw when present) → setCursor → ackTrim.
@@ -618,7 +618,7 @@ final class Backfiller {
                       p.parsed["ppg_waveform"] == nil,
                       !loggedUnmappedVersions.contains(v) else { continue }
                 loggedUnmappedVersions.insert(v)
-                log?("Historical records use firmware layout v\(v), which NOOP doesn't decode yet — no motion data, so sleep can't be computed from the strap. Please report this (issue #30).")
+                log?("Historical records use firmware layout v\(v), which MOVA doesn't decode yet — no motion data, so sleep can't be computed from the strap. Please report this (issue #30).")
             }
             let decoded = d.decoded
             // #520: accumulate the motion-magnitude diagnostic across the session; logged once at the
@@ -650,7 +650,7 @@ final class Backfiller {
             // it appears; the bad `rawTs` is the future/past base the RTC jumped to.
             let nowForRtc = Int(Date().timeIntervalSince1970)
             for ev in decoded.droppedRtcEvents {
-                log?("Backfill: strap reported \(ev.kind) with an implausible own-timestamp \(BadClockDiagnostics.isoDay(ev.rawTs)) (\(BadClockDiagnostics.hoursOffset(ev.rawTs, now: nowForRtc)) vs now) — the strap's RTC reset to a wrong base (#324/#928); this is the ground-truth cause of the future-dated banking, not a NOOP decode bug.")
+                log?("Backfill: strap reported \(ev.kind) with an implausible own-timestamp \(BadClockDiagnostics.isoDay(ev.rawTs)) (\(BadClockDiagnostics.hoursOffset(ev.rawTs, now: nowForRtc)) vs now) — the strap's RTC reset to a wrong base (#324/#928); this is the ground-truth cause of the future-dated banking, not a MOVA decode bug.")
             }
             // #891: packet types this chunk carried that the decoder has no case for. Logged the first
             // time each type appears so a long offload stays readable. This is the only place such a
@@ -662,7 +662,7 @@ final class Backfiller {
                 if firstSighting {
                     log?("Backfill: the strap sent \(n) record(s) of packet type \(typeName), which this " +
                          "decoder has no rows for — they are being dropped. If \(typeName) is not a name " +
-                         "you recognise, this is a firmware record type NOOP has never mapped: please " +
+                         "you recognise, this is a firmware record type MOVA has never mapped: please " +
                          "report it on #891 with the strap model and firmware build.")
                 }
             }

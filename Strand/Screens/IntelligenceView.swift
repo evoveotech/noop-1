@@ -28,7 +28,7 @@ struct IntelligenceView: View {
         // imported history, an eager VStack built every card up-front on the main thread and froze
         // the app when ALL was tapped (#345); LazyVStack only materialises what's on screen.
         ScreenScaffold(title: "Intelligence",
-                       subtitle: "NOOP scores your charge, effort and rest itself: on-device, no cloud.",
+                       subtitle: "MOVA scores your charge, effort and rest itself: on-device, no cloud.",
                        lazy: true,
                        // Liquid finish: the same full-bleed day-of-sky backdrop Today + the other liquid
                        // tabs carry, so Intelligence sits in one atmosphere. Static + non-interactive; the
@@ -203,7 +203,7 @@ struct IntelligenceView: View {
                         .accessibilityHidden(true)
                     Text("How this works").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
                 }
-                Text("Charge weighs your HRV against your personal baseline (~55%), resting heart rate (~20%), rest quality (~15%), respiration (~5%) and skin-temperature deviation (~5%). Effort is a 0-\(UnitFormatter.effortScaleMax(effortScale)) cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day NOOP collected raw streams.")
+                Text("Charge weighs your HRV against your personal baseline (~55%), resting heart rate (~20%), rest quality (~15%), respiration (~5%) and skin-temperature deviation (~5%). Effort is a 0-\(UnitFormatter.effortScaleMax(effortScale)) cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day MOVA collected raw streams.")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // The Charge model made concrete — the five weighted inputs, each its own metric accent.
@@ -266,7 +266,7 @@ struct IntelligenceView: View {
                     if d.recovery != nil {
                         ConfidenceTierChip(confidence: d.confidence)
                     }
-                    // The REAL source of the day's dashboard headline, not a hard-coded "NOOP-computed".
+                    // The REAL source of the day's dashboard headline, not a hard-coded "MOVA-computed".
                     // The By-Day numbers are always NOOP's on-device scores, but when an import covers the
                     // day it WINS the dashboard merge, so the badge says so ("Whoop" / "Apple Health") and
                     // a strap-scored night reads "On-device". Dynamic String → wrap in "\()" so it's shown

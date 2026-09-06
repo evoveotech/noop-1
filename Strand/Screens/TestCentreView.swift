@@ -112,7 +112,7 @@ struct TestCentreView: View {
             Button("Clear", role: .destructive) { clearScheduledExports() }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This deletes every scheduled strap-log and raw-capture file NOOP has saved. This can't be undone.")
+            Text("This deletes every scheduled strap-log and raw-capture file MOVA has saved. This can't be undone.")
         }
         .alert(infoTitle, isPresented: $showInfo) {
             Button("OK", role: .cancel) { }
@@ -190,7 +190,7 @@ struct TestCentreView: View {
                 Divider().overlay(StrandPalette.hairline)
                 Toggle("Legacy R22 feature-flag experiment", isOn: $deepDataEnabled)
                     .toggleStyle(.switch).tint(StrandPalette.accent)
-                Text("The strap accepts these writes, but NOOP has not observed them enabling a separate live stream. This is not the Raw Data Collector.")
+                Text("The strap accepts these writes, but MOVA has not observed them enabling a separate live stream. This is not the Raw Data Collector.")
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
                 if deepDataEnabled {
                     NoopButton("Send legacy R22 enable sequence", systemImage: "bolt.badge.automatic", kind: .secondary) {
@@ -290,7 +290,7 @@ struct TestCentreView: View {
                     Toggle(isOn: $polarDebugLogging) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Polar debug logging").font(StrandFont.body)
-                            Text("\(identity). Logs this to the strap log on each connect, so a Polar bug report shows the model NOOP resolved your strap to.")
+                            Text("\(identity). Logs this to the strap log on each connect, so a Polar bug report shows the model MOVA resolved your strap to.")
                                 .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -424,7 +424,7 @@ struct TestCentreView: View {
                         .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
                 }
                 .toggleStyle(.switch).tint(StrandPalette.accent)
-                Text("When NOOP reconstructs heart rate from the WHOOP 5/MG v26 optical waveform (the seconds the strap stored no HR), refine the autocorrelation peak with a parabolic sub-lag fit so the estimate is not quantized to roughly 16 bpm steps near a high HR. It only fills seconds the strap never reported; it never overrides a stored HR. 5/MG only, off by default.")
+                Text("When MOVA reconstructs heart rate from the WHOOP 5/MG v26 optical waveform (the seconds the strap stored no HR), refine the autocorrelation peak with a parabolic sub-lag fit so the estimate is not quantized to roughly 16 bpm steps near a high HR. It only fills seconds the strap never reported; it never overrides a stored HR. 5/MG only, off by default.")
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -506,7 +506,7 @@ struct TestCentreView: View {
             await model.repo.refresh()
         }
         infoTitle = String(localized: "Charge baseline recalibrating")
-        infoMessage = String(localized: "NOOP will re-learn your baseline from tonight's data onward. Your history is kept, and it takes a few nights to settle.")
+        infoMessage = String(localized: "MOVA will re-learn your baseline from tonight's data onward. Your history is kept, and it takes a few nights to settle.")
         showInfo = true
     }
 
@@ -546,7 +546,7 @@ struct TestCentreView: View {
             if let url {
                 infoTitle = String(localized: "Strap log exported")
                 #if os(iOS)
-                infoMessage = String(localized: "Saved \(url.lastPathComponent) to NOOP's folder in the Files app.")
+                infoMessage = String(localized: "Saved \(url.lastPathComponent) to MOVA's folder in the Files app.")
                 #else
                 infoMessage = String(localized: "Saved \(url.lastPathComponent) to your Documents folder.")
                 #endif

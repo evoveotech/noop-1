@@ -1473,7 +1473,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
         }
         pendingInstallKey = key
         adoptPhase = .installingKey
-        log("Oura: installing NOOP's key on the reset ring")
+        log("Oura: installing MOVA's key on the reset ring")
         write([cmd])
     }
 
@@ -2135,7 +2135,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
         case installFailed(String)
     }
 
-    /// Record + log the honest "this ring needs a pairing handshake NOOP can't complete" outcome (once),
+    /// Record + log the honest "this ring needs a pairing handshake MOVA can't complete" outcome (once),
     /// and drop the link so no half-authenticated session lingers. We never fabricate a reading. Also marks
     /// `adoptPhase = .failed` so an in-flight adopt's Adopting step lands on a REACHABLE honest Failed state
     /// (file-import + Advanced-key fallbacks), and clears any in-flight install key WITHOUT persisting it (a
@@ -2160,11 +2160,11 @@ public final class OuraLiveSource: NSObject, ObservableObject {
         let detail: String
         switch reason {
         case .factoryResetOrNoKey:
-            detail = "NOOP needs the ring's install key to read it live, and that pairing handshake isn't set up yet."
+            detail = "MOVA needs the ring's install key to read it live, and that pairing handshake isn't set up yet."
         case .authFailed(let status):
             detail = "The ring rejected the pairing handshake (status \(status.rawValue))."
         case .installFailed(let why):
-            detail = "NOOP couldn't take over this ring (\(why))."
+            detail = "MOVA couldn't take over this ring (\(why))."
         }
         let recovery = " The ring isn't bricked: re-pair it in the Oura app to recover it."
         let msg = detail + " Live data isn't available - export from the Oura app and import the file instead." + recovery

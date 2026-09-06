@@ -866,7 +866,7 @@ struct TodayView: View {
     /// PURE mapper (unit-testable), a raw resolver source id onto the spec's provenance labels, given
     /// the strap's real `deviceId`. ANY NOOP-computed strap sibling (a "-noop"-suffixed id, not just the
     /// active strap's) reads "On-device" — matching by suffix so a computed row from a non-active strap
-    /// can't fall through to `FusionSource.noopComputed`'s raw "NOOP" displayName; the imported strap source
+    /// can't fall through to `FusionSource.noopComputed`'s raw "MOVA" displayName; the imported strap source
     /// (`deviceId`, normally "my-whoop") reads "Whoop"; the Apple-Health source reads "Apple Health".
     /// Any other real source (Mi Band, Health Connect, nutrition) keeps its `FusionSource.displayName`
     ///, still the genuine merge winner, never a blanket claim. Mirror EXACTLY in Kotlin.
@@ -914,7 +914,7 @@ struct TodayView: View {
         return StrandPalette.statusPositive
     }
 
-    // MARK: Apple Watch provenance (M1): "the watch is the sensor, NOOP is the brain"
+    // MARK: Apple Watch provenance (M1): "the watch is the sensor, MOVA is the brain"
 
     /// True when the selected day's value for `metricKey` was supplied by the Apple-Health source (a
     /// watch-only user's Charge/Rest). The store source stays `apple-health` so the engines and the
@@ -4132,7 +4132,7 @@ struct TodayView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Data sources")
-        .accessibilityHint("Show what NOOP is synced from")
+        .accessibilityHint("Show what MOVA is synced from")
     }
 
     /// PURE: the "Synced from: …" summary string for the collapsed footer (S5). Names the sources with

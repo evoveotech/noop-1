@@ -445,7 +445,7 @@ struct RootTabView: View {
                     // reads the opt-in Documents/noop_sync.txt drop file).
                     MoreRow("Shortcuts Export", "square.and.arrow.up.fill", .shortcutsExport)
                     // The plain 4.0 vs 5.0/MG capability grid — what NOOP reads live off each strap.
-                    MoreRow("NOOP Limitations", "list.bullet.rectangle", .noopLimitations)
+                    MoreRow("MOVA Limitations", "list.bullet.rectangle", .noopLimitations)
                 }
                 moreSection("App") {
                     // #805/#811: the v7.3.1 #766 alarm consolidation moved Smart Alarm under a single

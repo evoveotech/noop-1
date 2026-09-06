@@ -28,7 +28,7 @@ struct LiquidTodayView: View {
     // only publishes connect/discovery state, never HR. Injected at the app roots beside .environmentObject(model).
     @EnvironmentObject var ble: BLEManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Low Power Mode — and the in-app "Reduce motion in NOOP" toggle — pose the sky still too, the
+    /// Low Power Mode — and the in-app "Reduce motion in MOVA" toggle — pose the sky still too, the
     /// behaviour the comment on the sky branch below has always described. Neither has a SwiftUI
     /// environment key, hence the shared monitor.
     @ObservedObject private var motion = NoopMotionState.shared
@@ -1983,7 +1983,7 @@ private struct LiquidWordmark: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ForEach(Array("NOOP".enumerated()), id: \.offset) { _, ch in
+            ForEach(Array("MOVA".enumerated()), id: \.offset) { _, ch in
                 Text(String(ch))
                     .font(StrandFont.rounded(16, weight: .bold))
                     .foregroundStyle(StrandPalette.textTertiary)

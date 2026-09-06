@@ -6,7 +6,7 @@ import AppIntents
 /// These reach the LIVE, bonded `AppModel` via `AppModel.shared`. Constructing a fresh `AppModel()`
 /// from an intent would be wrong: it would start a second BLEManager + a duplicate 15-min analysis
 /// loop and could never buzz (the haptic command is gated on the live bonded peripheral). The
-/// `weak` shared accessor lets an intent fired while NOOP is closed fail with a clear "open NOOP"
+/// `weak` shared accessor lets an intent fired while NOOP is closed fail with a clear "open MOVA"
 /// message instead of silently no-op'ing on a dead instance. (#42 idea-mining; macOS 13+ supports
 /// AppIntents — no new entitlement or Info.plist key required.)
 
@@ -16,8 +16,8 @@ enum NOOPIntentError: Error, CustomLocalizedStringResourceConvertible {
     case notConnected
     var localizedStringResource: LocalizedStringResource {
         switch self {
-        case .notRunning:   return "Open NOOP first so it can reach your strap."
-        case .notConnected: return "Connect your WHOOP strap in NOOP, then try again."
+        case .notRunning:   return "Open MOVA first so it can reach your strap."
+        case .notConnected: return "Connect your WHOOP strap in MOVA, then try again."
         }
     }
 }

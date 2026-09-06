@@ -58,7 +58,7 @@ struct NOOPWatchApp: App {
 
     #if DEBUG
     /// DEBUG-ONLY screenshot aid. On a fresh sim there is no paired phone to push scores, so the glance
-    /// would sit on its empty "open NOOP on your iPhone" state and the rings never render. When nothing
+    /// would sit on its empty "open MOVA on your iPhone" state and the rings never render. When nothing
     /// has ever synced we write ONE believable sample snapshot into the shared app group so the rings
     /// draw for screenshots. Guarded so it never overwrites a real synced snapshot, and the whole thing
     /// is compiled out of release builds, so it can never ship.

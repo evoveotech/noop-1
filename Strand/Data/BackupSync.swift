@@ -175,7 +175,7 @@ enum FolderBackup {
     /// #52: on some iOS 26 builds the system folder picker's "Open" button never enables/fires, so users
     /// can't choose an external folder at all (three reports, works for one). This opt-in falls back to
     /// NOOP's OWN Documents/Backups folder — already exposed in Files (UIFileSharingEnabled +
-    /// LSSupportsOpeningDocumentsInPlace) under "On My iPhone → NOOP" — so Backup & Sync works with zero
+    /// LSSupportsOpeningDocumentsInPlace) under "On My iPhone → MOVA" — so Backup & Sync works with zero
     /// dependence on the picker. No security-scoped bookmark is involved (the folder is inside our own
     /// sandbox), so `resolveFolder`/`saveFolder`'s scoped-access brackets simply no-op for it. The user
     /// can drag that folder into iCloud Drive to read backups on the Mac; a first-class iCloud container
@@ -211,7 +211,7 @@ enum FolderBackup {
     /// picker, a bookmark or a device.
     static func isICloudPath(_ path: String) -> Bool { path.contains("Mobile Documents") }
 
-    /// The tail of a folder path, for display: `"NOOP › 2026"`.
+    /// The tail of a folder path, for display: `"MOVA › 2026"`.
     ///
     /// The bare last component is not enough to identify a folder — a "Backups" folder in iCloud Drive
     /// and the #52 internal fallback's `Documents/Backups` render identically, which is exactly the
@@ -225,7 +225,7 @@ enum FolderBackup {
         var parts = path.split(separator: "/").map(String.init).filter { !$0.isEmpty }
         // Slice AFTER the sync root rather than filtering it out: on macOS an iCloud path is
         // `~/Library/Mobile Documents/com~apple~CloudDocs/NOOP`, so merely dropping the tilde component
-        // leaves "Mobile Documents › NOOP" — plumbing the reader should never see.
+        // leaves "Mobile Documents › MOVA" — plumbing the reader should never see.
         if let i = parts.lastIndex(where: {
             $0 == "com~apple~CloudDocs" || $0.hasPrefix("iCloud~") || $0 == "Mobile Documents"
         }) { parts = Array(parts[(i + 1)...]) }
@@ -239,7 +239,7 @@ enum FolderBackup {
     /// the gap was never the choosing — it was that the result was unidentifiable afterwards. A user on
     /// the internal fallback saw a bare "Backups" and could not tell their backups were on-device only.
     static func folderLabel() -> String? {
-        if useInternalFolder { return String(localized: "NOOP (in Files)") }
+        if useInternalFolder { return String(localized: "MOVA (in Files)") }
         guard let path = resolveFolder()?.path else { return nil }
         let trail = folderTrail(path: path)
         if isICloudPath(path) {
@@ -441,7 +441,7 @@ enum FolderBackup {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = String(localized: "Choose")
-        panel.message = String(localized: "Choose a folder for NOOP backups (for example a Google Drive or iCloud folder).")
+        panel.message = String(localized: "Choose a folder for MOVA backups (for example a Google Drive or iCloud folder).")
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         saveFolder(url)
         return url

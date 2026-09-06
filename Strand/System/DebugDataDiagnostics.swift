@@ -94,7 +94,7 @@ enum DebugDataDiagnostics {
         #if os(iOS)
         // #52: iOS Backup & Sync folder-picker health. When users report "won't let me pick a folder",
         // this pins the failure stage: "cancelled"/"never used" ⇒ the picker's Open button never fired
-        // (an iOS-side picker issue — the in-app "Use NOOP's own folder" fallback sidesteps it);
+        // (an iOS-side picker issue — the in-app "Use MOVA's own folder" fallback sidesteps it);
         // "picked" + a FAILED flag ⇒ a returned folder failed to bookmark HERE (our bug).
         let pickEvent = d.string(forKey: "backupPicker.lastEvent") ?? "never used"
         let pickAt = d.double(forKey: "backupPicker.lastEventAt")

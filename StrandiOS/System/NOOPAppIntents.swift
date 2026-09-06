@@ -62,7 +62,7 @@ enum PendingIntents {
 /// Record a timestamped "moment" — the iOS analogue of the strap double-tap "mark a moment" action.
 struct MarkMomentIntent: AppIntent {
     static var title: LocalizedStringResource = "Mark a Moment"
-    static var description = IntentDescription("Record a timestamped moment in NOOP.")
+    static var description = IntentDescription("Record a timestamped moment in MOVA.")
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         PendingIntents.append(.markMoment, at: Date())
@@ -87,7 +87,7 @@ struct BuzzStrapIntent: AppIntent {
 /// the app handles the actual network call using the user's saved key.
 struct AskCoachIntent: AppIntent {
     static var title: LocalizedStringResource = "Ask Coach"
-    static var description = IntentDescription("Ask your NOOP Coach a question about your recovery, sleep, or training.")
+    static var description = IntentDescription("Ask your MOVA Coach a question about your recovery, sleep, or training.")
     static var openAppWhenRun = true
 
     /// The question to ask, populated by Siri from the user's spoken phrase.

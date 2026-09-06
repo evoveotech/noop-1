@@ -433,48 +433,48 @@
         }
       }
     },
-    "Charge out of date, last synced %@. Open NOOP on iPhone.": {
+    "Charge out of date, last synced %@. Open MOVA on iPhone.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ladung veraltet, zuletzt synchronisiert %@. Öffne NOOP auf dem iPhone."
+            "value": "Ladung veraltet, zuletzt synchronisiert %@. Öffne MOVA auf dem iPhone."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Charge out of date, last synced %@. Open NOOP on iPhone."
+            "value": "Charge out of date, last synced %@. Open MOVA on iPhone."
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "Carga desatualizada, última sincronização %@. Abra o NOOP no iPhone."
+            "value": "Carga desatualizada, última sincronização %@. Abra o MOVA no iPhone."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Заряд устарел, последняя синхронизация %@. Откройте NOOP на iPhone."
+            "value": "Заряд устарел, последняя синхронизация %@. Откройте MOVA на iPhone."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Carga fuera de la fecha, última sincronizada %1$@. Abrir NOOP en iPhone."
+            "value": "Carga fuera de la fecha, última sincronizada %1$@. Abrir MOVA en iPhone."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Charge hors date, dernière synchronisation %1$@. Ouvrez NOOP sur iPhone."
+            "value": "Charge hors date, dernière synchronisation %1$@. Ouvrez MOVA sur iPhone."
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Energia nieaktualny, ostatnia synchronizacja %@. Otwórz NOOP na iPhonie."
+            "value": "Energia nieaktualny, ostatnia synchronizacja %@. Otwórz MOVA na iPhonie."
           }
         }
       }
@@ -773,128 +773,128 @@
         }
       }
     },
-    "NOOP Charge": {
+    "MOVA Charge": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP Ladung"
+            "value": "MOVA Ladung"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP Charge"
+            "value": "MOVA Charge"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Carga de NOOP"
+            "value": "Carga de MOVA"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Carica NOOP"
+            "value": "Carica MOVA"
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "Carga NOOP"
+            "value": "Carga MOVA"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP Заряд"
+            "value": "MOVA Заряд"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP 能量"
+            "value": "MOVA 能量"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP 能量"
+            "value": "MOVA 能量"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Charge NOOP"
+            "value": "Charge MOVA"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP Energia"
+            "value": "MOVA Energia"
           }
         }
       }
     },
-    "NOOP · open on iPhone": {
+    "MOVA · open on iPhone": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP · auf iPhone öffnen"
+            "value": "MOVA · auf iPhone öffnen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP · open on iPhone"
+            "value": "MOVA · open on iPhone"
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP · abrir no iPhone"
+            "value": "MOVA · abrir no iPhone"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP · откройте на iPhone"
+            "value": "MOVA · откройте на iPhone"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP · abierto en iPhone"
+            "value": "MOVA · abierto en iPhone"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP · ouvert sur iPhone"
+            "value": "MOVA · ouvert sur iPhone"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP · otwórz na iPhonie"
+            "value": "MOVA · otwórz na iPhonie"
           }
         }
       }
     },
-    "NOOP. %@, %@, %@.": {
+    "MOVA. %@, %@, %@.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. %@, %@, %@."
+            "value": "MOVA. %@, %@, %@."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. %@, %@, %@."
+            "value": "MOVA. %@, %@, %@."
           }
         },
         "pt-PT": {
@@ -906,13 +906,13 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. %@, %@, %@."
+            "value": "MOVA. %@, %@, %@."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. %1$@, %2$@, %3$@."
+            "value": "MOVA. %1$@, %2$@, %3$@."
           }
         },
         "fr": {
@@ -924,191 +924,191 @@
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. %@, %@, %@."
+            "value": "MOVA. %@, %@, %@."
           }
         }
       }
     },
-    "NOOP. No data yet, open NOOP on your iPhone to sync.": {
+    "MOVA. No data yet, open MOVA on your iPhone to sync.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Noch keine Daten, öffne NOOP auf deinem iPhone zum Synchronisieren."
+            "value": "MOVA. Noch keine Daten, öffne MOVA auf deinem iPhone zum Synchronisieren."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. No data yet, open NOOP on your iPhone to sync."
+            "value": "MOVA. No data yet, open MOVA on your iPhone to sync."
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "NÃO. Ainda não há dados, abra o NOOP no teu iPhone para tincronizar."
+            "value": "NÃO. Ainda não há dados, abra o MOVA no teu iPhone para tincronizar."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Данных пока нет, откройте NOOP на iPhone для синхронизации."
+            "value": "MOVA. Данных пока нет, откройте MOVA на iPhone для синхронизации."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Aún no hay datos, abra NOOP en su iPhone para sincronizar."
+            "value": "MOVA. Aún no hay datos, abra MOVA en su iPhone para sincronizar."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "- Oui. Pas encore de données, ouvrez NOOP sur votre iPhone pour synchroniser."
+            "value": "- Oui. Pas encore de données, ouvrez MOVA sur votre iPhone pour synchroniser."
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Nie ma jeszcze danych. Otwórz NOOP na swoim iPhonie, aby przeprowadzić synchronizację."
+            "value": "MOVA. Nie ma jeszcze danych. Otwórz MOVA na swoim iPhonie, aby przeprowadzić synchronizację."
           }
         }
       }
     },
-    "NOOP. Scores out of date, last synced %@. Open NOOP on iPhone to refresh.": {
+    "MOVA. Scores out of date, last synced %@. Open MOVA on iPhone to refresh.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Werte veraltet, zuletzt synchronisiert %@. Öffne NOOP auf dem iPhone zum Aktualisieren."
+            "value": "MOVA. Werte veraltet, zuletzt synchronisiert %@. Öffne MOVA auf dem iPhone zum Aktualisieren."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Scores out of date, last synced %@. Open NOOP on iPhone to refresh."
+            "value": "MOVA. Scores out of date, last synced %@. Open MOVA on iPhone to refresh."
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "NÃO. Pontuações desatualizadas, última sincronização %@. Abra o NOOP no iPhone para atualizar."
+            "value": "NÃO. Pontuações desatualizadas, última sincronização %@. Abra o MOVA no iPhone para atualizar."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Показатели устарели, последняя синхронизация %@. Откройте NOOP на iPhone, чтобы обновить."
+            "value": "MOVA. Показатели устарели, последняя синхронизация %@. Откройте MOVA на iPhone, чтобы обновить."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Resultados fuera de la fecha, último sincronizado %1$@. Abra NOOP en iPhone para refrescarse."
+            "value": "MOVA. Resultados fuera de la fecha, último sincronizado %1$@. Abra MOVA en iPhone para refrescarse."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "- Oui. Les scores sont dépassés, le dernier %1$@ synchronisé. Ouvrez NOOP sur iPhone pour vous rafraîchir."
+            "value": "- Oui. Les scores sont dépassés, le dernier %1$@ synchronisé. Ouvrez MOVA sur iPhone pour vous rafraîchir."
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP. Wyniki nieaktualne, ostatnia synchronizacja %@. Otwórz NOOP na iPhonie, aby odświeżyć."
+            "value": "MOVA. Wyniki nieaktualne, ostatnia synchronizacja %@. Otwórz MOVA na iPhonie, aby odświeżyć."
           }
         }
       }
     },
-    "No data, open NOOP on iPhone": {
+    "No data, open MOVA on iPhone": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keine Daten, öffne NOOP auf dem iPhone"
+            "value": "Keine Daten, öffne MOVA auf dem iPhone"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No data, open NOOP on iPhone"
+            "value": "No data, open MOVA on iPhone"
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sem dados, abra o NOOP no iPhone"
+            "value": "Sem dados, abra o MOVA no iPhone"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Нет данных, откройте NOOP на iPhone"
+            "value": "Нет данных, откройте MOVA на iPhone"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "No hay datos, abra NOOP en iPhone"
+            "value": "No hay datos, abra MOVA en iPhone"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pas de données, ouvrir NOOP sur iPhone"
+            "value": "Pas de données, ouvrir MOVA sur iPhone"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Brak danych, otwórz NOOP na iPhonie"
+            "value": "Brak danych, otwórz MOVA na iPhonie"
           }
         }
       }
     },
-    "Open NOOP": {
+    "Open MOVA": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP öffnen"
+            "value": "MOVA öffnen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open NOOP"
+            "value": "Open MOVA"
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "Abrir NOOP"
+            "value": "Abrir MOVA"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Открыть NOOP"
+            "value": "Открыть MOVA"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open NOOP"
+            "value": "Open MOVA"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ouvrir NOOP"
+            "value": "Ouvrir MOVA"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Otwórz NOOP"
+            "value": "Otwórz MOVA"
           }
         }
       }
