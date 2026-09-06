@@ -650,6 +650,43 @@ if ($isUpstreamSource -and $preMergeHead) {
             }
         }
 
+        # Tier 3: marker-based detection for partial overwrites.
+        # The blob-hash comparison in Tier 2 only catches a COMPLETE overwrite (post-merge
+        # blob == upstream blob). If upstream ALSO changed the file in this sync, the
+        # post-merge blob will differ from upstream's (it has upstream's new changes), so
+        # Tier 2 won't flag it — even though -X theirs may have silently dropped the fork's
+        # specific additions in conflicting hunks. This tier checks for known fork-specific
+        # markers (regex patterns) that MUST be present in certain files. If a marker is
+        # missing after the merge, the fork's changes were partially overwritten.
+        #
+        # Unlike Tier 2, this tier does NOT auto-restore — because the file has upstream
+        # changes we want to keep, blindly restoring the pre-merge version would lose them.
+        # Instead it warns loudly so the operator can manually merge.
+        $forkMarkerChecks = @(
+            @{ File = "Strand/Collect/StorePaths.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID" }
+            @{ File = "Strand/Collect/RawHistoryArchive.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID" }
+            @{ File = "StrandiOSShared/WidgetSnapshot.swift"; Pattern = "group\.com\.evoveo\.noop"; Desc = "evoveo App Group" }
+            @{ File = "Packages/NoopLocalAccess/Sources/NoopLocalAccessCore/LocalAccessCore.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID" }
+            @{ File = "Strand/Screens/SettingsView.swift"; Pattern = "showsGitHubDistributionLinks"; Desc = "distribution UI gating" }
+            @{ File = "Strand/Liquid/LiquidTodayView.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap" }
+            @{ File = "Strand/Screens/ScreenScaffold.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap" }
+        )
+        foreach ($check in $forkMarkerChecks) {
+            $f = $check.File
+            if (-not (Test-Path $f)) { continue }
+            $postContent = Get-Content $f -Raw -ErrorAction SilentlyContinue
+            if (-not $postContent) { continue }
+            if ($postContent -notmatch $check.Pattern) {
+                # Check if the pre-merge version HAD the marker — if so, it was lost.
+                $preContent = git show "${preMergeHead}:$f" 2>$null
+                if ($preContent -and ($preContent -match $check.Pattern)) {
+                    Write-Host "  WARNING: fork marker lost in $f ($($check.Desc))" -ForegroundColor Red
+                    Write-Host "    The file has upstream changes but fork-specific code was dropped." -ForegroundColor DarkYellow
+                    Write-Host "    Manually merge: git diff ${preMergeHead}..HEAD -- $f" -ForegroundColor DarkYellow
+                }
+            }
+        }
+
         # Commit all restored files
         if ($restoredFiles.Count -gt 0) {
             $existingRestored = $restoredFiles | Where-Object { Test-Path $_ }
@@ -1118,6 +1155,160 @@ if ($isUpstreamSource) {
         Write-Host "✓ sync-upstream.yml exists, keeping it" -ForegroundColor Green
     } else {
         Write-Host "⚠ WARNING: sync-upstream.yml missing" -ForegroundColor Yellow
+    }
+}
+
+# ── Fork-marker audit ─────────────────────────────────────────────────────
+# The single most important lesson from the #1532 recurrence: the generic step 9
+# and the specific re-application steps (10-12b) can all fail silently. A regex
+# anchor may not match after an upstream refactor, a file may be renamed, or a
+# hard reset (instead of a merge) may bypass the entire workflow. This step is
+# the safety net: it checks for known fork-specific markers in key files AFTER
+# all re-application steps have run. If any marker is missing, it warns LOUDLY
+# so the operator knows exactly what to fix before pushing.
+#
+# Each entry: file path, a regex pattern that MUST be present in the file, and
+# a human-readable description of what the marker is. The check is read-only —
+# it never modifies files, only reports. This is intentional: automatic
+# restoration of a marker whose anchor has shifted could silently patch the
+# wrong place. Better to warn and let a human decide.
+if ($isUpstreamSource) {
+    Write-Host "`n[13b/14] Auditing fork-specific markers..." -ForegroundColor Yellow
+
+    $forkMarkers = @(
+        @{ File = "Strand/Collect/StorePaths.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in StorePaths" }
+        @{ File = "Strand/Collect/RawHistoryArchive.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in RawHistoryArchive" }
+        @{ File = "StrandiOSShared/WidgetSnapshot.swift"; Pattern = "group\.com\.evoveo\.noop"; Desc = "evoveo App Group in WidgetSnapshot" }
+        @{ File = "Packages/NoopLocalAccess/Sources/NoopLocalAccessCore/LocalAccessCore.swift"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in LocalAccessCore" }
+        @{ File = "altstore-source.json"; Pattern = '"bundleIdentifier":\s*"com\.evoveo\.noop"'; Desc = "evoveo bundle ID in altstore-source" }
+        @{ File = "project.yml"; Pattern = "BUNDLE_ID_PREFIX"; Desc = "BUNDLE_ID_PREFIX setting in project.yml" }
+        @{ File = "project.yml"; Pattern = "CFBundleDisplayName: MOVA"; Desc = "MOVA display name in project.yml" }
+        @{ File = "Strand/Screens/SettingsView.swift"; Pattern = "showsGitHubDistributionLinks"; Desc = "distribution UI gating in SettingsView" }
+        @{ File = "Strand/Screens/SettingsView.swift"; Pattern = "IOSDiagnostics\.capture\(\)\.isSideloaded"; Desc = "isSideloaded gate in SettingsView" }
+        @{ File = "Strand/Liquid/LiquidTodayView.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap in LiquidTodayView" }
+        @{ File = "Strand/Screens/ScreenScaffold.swift"; Pattern = "viewportWidth"; Desc = "#1532 width cap in ScreenScaffold" }
+        @{ File = "Config/BundleIdSecrets.xcconfig"; Pattern = "BUNDLE_ID_PREFIX = com\.evoveo"; Desc = "evoveo prefix in BundleIdSecrets.xcconfig" }
+        @{ File = "Config/BundleIdSecrets.xcconfig"; Pattern = "DEVELOPMENT_TEAM = V64Y34CXW2"; Desc = "development team in BundleIdSecrets.xcconfig" }
+        @{ File = "sync-upstream.ps1"; Pattern = "1532"; Desc = "#1532 fix step in sync-upstream.ps1 itself" }
+        @{ File = "testflight-build.ps1"; Pattern = "TestFlight"; Desc = "TestFlight build script" }
+        @{ File = "exportOptions.plist"; Pattern = "com\.evoveo\.noop"; Desc = "evoveo bundle ID in exportOptions.plist" }
+    )
+
+    $missingMarkers = @()
+    $presentCount = 0
+
+    foreach ($marker in $forkMarkers) {
+        $file = $marker.File
+        $pattern = $marker.Pattern
+        $desc = $marker.Desc
+
+        if (-not (Test-Path $file)) {
+            Write-Host "  MISSING FILE: $file ($desc)" -ForegroundColor Red
+            $missingMarkers += $marker
+            continue
+        }
+
+        $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
+        if (-not $content) {
+            Write-Host "  MISSING MARKER: $file — file empty or unreadable ($desc)" -ForegroundColor Red
+            $missingMarkers += $marker
+            continue
+        }
+
+        if ($content -match $pattern) {
+            $presentCount++
+        } else {
+            Write-Host "  MISSING MARKER: $file — pattern not found: $desc" -ForegroundColor Red
+            $missingMarkers += $marker
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  Fork-marker audit: $presentCount/$($forkMarkers.Count) markers present" -ForegroundColor $(if ($missingMarkers.Count -eq 0) { "Green" } else { "Red" })
+
+    if ($missingMarkers.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  *** FORK-MARKER AUDIT FAILED ***" -ForegroundColor Red
+        Write-Host "  $($missingMarkers.Count) marker(s) missing — fork-specific changes were lost." -ForegroundColor Red
+        Write-Host "  DO NOT PUSH until these are manually restored:" -ForegroundColor Red
+        Write-Host ""
+        foreach ($m in $missingMarkers) {
+            Write-Host "    - $($m.File): $($m.Desc)" -ForegroundColor Red
+        }
+        Write-Host ""
+        Write-Host "  To restore from the last known-good fork commit:" -ForegroundColor Yellow
+        Write-Host "    git show <fork-commit>:<file> > <file>" -ForegroundColor Yellow
+        Write-Host ""
+    } else {
+        Write-Host "  All fork-specific markers present — safe to push." -ForegroundColor Green
+    }
+}
+
+# ── Build verification ────────────────────────────────────────────────────
+# The final safety net: actually compile the app after sync. If the merge or
+# any re-application step produced code that doesn't compile (e.g. a regex
+# patch landed in the wrong place, or an upstream API change broke fork code),
+# this catches it BEFORE the sync is pushed. A failed build here means the
+# sync is incomplete — do not push.
+if ($isUpstreamSource) {
+    Write-Host "`n[13c/14] Build verification..." -ForegroundColor Yellow
+
+    # Regenerate the Xcode project — project.yml changes (bundle IDs, build number,
+    # branding) don't take effect until xcodegen runs.
+    Write-Host "  Running xcodegen generate..." -ForegroundColor DarkGray
+    $xgenOutput = & xcodegen generate 2>&1
+    $xgenExit = $LASTEXITCODE
+    if ($xgenOutput) { Write-Host "  $xgenOutput" -ForegroundColor DarkGray }
+    if ($xgenExit -ne 0) {
+        Write-Host "  xcodegen FAILED (exit $xgenExit) — project.yml may have a syntax error" -ForegroundColor Red
+        Write-Host "  DO NOT PUSH — fix project.yml and re-run xcodegen generate" -ForegroundColor Red
+    } else {
+        Write-Host "  xcodegen succeeded" -ForegroundColor Green
+
+        # Build for simulator — fast, no signing needed, catches compile errors.
+        # Use a temporary derivedDataPath so it doesn't interfere with any
+        # concurrent Xcode session.
+        Write-Host "  Building for iOS Simulator..." -ForegroundColor DarkGray
+        $buildOutput = & xcodebuild -project Strand.xcodeproj -scheme NOOPiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' -configuration Debug -derivedDataPath build/sync-verify build 2>&1
+        $buildExit = $LASTEXITCODE
+
+        # Check the last few lines for the result
+        $buildTail = $buildOutput | Select-Object -Last 5
+        foreach ($line in $buildTail) { Write-Host "  $line" -ForegroundColor DarkGray }
+
+        if ($buildExit -ne 0 -or ($buildOutput -notmatch "\*\* BUILD SUCCEEDED \*\*")) {
+            Write-Host ""
+            Write-Host "  BUILD FAILED — the synced code does not compile." -ForegroundColor Red
+            Write-Host "  DO NOT PUSH — fix compile errors first." -ForegroundColor Red
+            Write-Host "  Common causes: upstream API change not reflected in fork code," -ForegroundColor Yellow
+            Write-Host "  regex patch landed in wrong place, or MOVA branding hit an identifier." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  To see errors: xcodebuild -project Strand.xcodeproj -scheme NOOPiOS \\" -ForegroundColor Yellow
+            Write-Host "    -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \\" -ForegroundColor Yellow
+            Write-Host "    -configuration Debug -derivedDataPath build/sync-verify build 2>&1 | grep -E 'error:|warning:'" -ForegroundColor Yellow
+        } else {
+            Write-Host "  BUILD SUCCEEDED — synced code compiles cleanly" -ForegroundColor Green
+
+            # Verify the built app's bundle ID — catches a project.yml / xcconfig
+            # issue that would ship the wrong bundle ID to TestFlight.
+            $appPath = "build/sync-verify/Build/Products/Debug-iphonesimulator/NOOP Staging.app"
+            if (Test-Path "$appPath/Info.plist") {
+                $bundleId = & plutil -extract CFBundleIdentifier raw "$appPath/Info.plist" 2>$null
+                $displayName = & plutil -extract CFBundleDisplayName raw "$appPath/Info.plist" 2>$null
+                Write-Host "  Built app bundle ID: $bundleId" -ForegroundColor DarkGray
+                Write-Host "  Built app display name: $displayName" -ForegroundColor DarkGray
+                if ($bundleId -ne "com.evoveo.noop") {
+                    Write-Host ""
+                    Write-Host "  WARNING: bundle ID is '$bundleId', expected 'com.evoveo.noop'" -ForegroundColor Red
+                    Write-Host "  Check Config/BundleIdSecrets.xcconfig and project.yml" -ForegroundColor Red
+                } else {
+                    Write-Host "  Bundle ID verified: com.evoveo.noop" -ForegroundColor Green
+                }
+                if ($displayName -ne "MOVA") {
+                    Write-Host "  WARNING: display name is '$displayName', expected 'MOVA'" -ForegroundColor Yellow
+                }
+            }
+        }
     }
 }
 
