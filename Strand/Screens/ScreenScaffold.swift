@@ -31,6 +31,16 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
     // by `#if os(iOS)` — a runtime size-class check alone would also narrow the Mac detail pane.
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    /// #1532 recurrence fix: the real viewport width, measured by a background GeometryReader.
+    /// Used to hard-cap the scroll content column so no child can widen the ScrollView's reported
+    /// content size and enable horizontal panning. `.scrollBounceBehavior(.basedOnSize)` alone
+    /// (the only part of #1532 that landed upstream) only suppresses bounce when content does NOT
+    /// overflow — but a child that briefly asks for more width than the screen (a long unwrapped
+    /// URL, a code block, a measured-width control that hasn't settled) makes the content genuinely
+    /// overflow and enables real horizontal panning. This cap makes that structurally impossible.
+    /// iOS-only; macOS is unchanged. Zero until the first layout pass, so the initial frame uses
+    /// `.infinity` (no cap) — the cap locks in on the very next redraw.
+    @State private var viewportWidth: CGFloat = 0
     #endif
 
     /// Bumped (via the environment) when the iOS tab shell wants THIS screen scrolled to the top — an
@@ -58,6 +68,14 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
             .frame(maxWidth: hSizeClass == .regular ? 700 : .infinity,
                    alignment: hSizeClass == .regular ? .center : .leading)
             .frame(maxWidth: .infinity, alignment: .center)
+            // #1532 recurrence fix: hard-cap the entire scroll content to the measured viewport
+            // width so no child can ever widen the ScrollView's reported content size and enable
+            // horizontal panning. This is the cap that was withdrawn from the upstream #1532 merge.
+            // iOS-only (the GeometryReader measuring viewportWidth is also iOS-only); macOS is
+            // unchanged. `.frame(width:)` sets the reported content width without clipping — children
+            // that need more wrap/truncate per SwiftUI's normal layout. Zero on the first frame
+            // (before the background GeometryReader fires), so fall back to `.infinity` (no cap).
+            .frame(width: viewportWidth > 0 ? viewportWidth : .infinity)
             #else
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -68,6 +86,15 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
         // permits horizontal bounce when content genuinely overflows the width (it does not here, the column
         // is width-capped), so the spurious horizontal rubber-band that caused the sideways drift is gone.
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        // #1532 recurrence fix: measure the viewport width via a background GeometryReader so we
+        // can hard-cap the scroll content above. Background so it doesn't affect layout; iOS-only.
+        .background {
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { viewportWidth = g.size.width }
+                    .onChange(of: g.size.width) { _, newWidth in viewportWidth = newWidth }
+            }
+        }
         #endif
         // The flat canvas, plus an optional full-bleed TOP backdrop (Today's day-cycle scene) drawn behind
         // the scroll content — edge-to-edge under the status bar. The scene is CONFINED to the header+hero

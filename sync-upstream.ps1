@@ -952,6 +952,149 @@ if ($isUpstreamSource) {
     }
 }
 
+# Re-apply the #1532 recurrence fix: the GeometryReader + hard width cap on the scroll content
+# (only after upstream merge — upstream #1532 only merged `.scrollBounceBehavior(.basedOnSize)`,
+# which the PR author themselves said was "insufficient on its own." The width cap was withdrawn
+# by the upstream reviewer due to concerns about macOS layout and content clipping. This fork's
+# version addresses both: the GeometryReader is iOS-only (guarded by #if os(iOS)), and `.frame
+# (width:)` sets the reported content width without clipping — children wrap/truncate per
+# SwiftUI's normal layout. Without this, navigating between yesterday and today on the home screen
+# can trigger horizontal panning when the header row briefly overflows during a day-switch.)
+if ($isUpstreamSource) {
+    Write-Host "`n[12b/14] Re-applying #1532 recurrence fix (scroll content width cap)..." -ForegroundColor Yellow
+
+    $patchedFiles = @()
+
+    # 1. LiquidTodayView.swift — add viewportWidth @State and the width cap on the scroll content.
+    $todayPath = "Strand/Liquid/LiquidTodayView.swift"
+    if (Test-Path $todayPath) {
+        $content = Get-Content $todayPath -Raw
+        $original = $content
+
+        # Add the @State viewportWidth property if missing (after headerControlsWidth).
+        if ($content -notmatch [regex]::Escape('@State private var viewportWidth: CGFloat = 0')) {
+            $content = $content -replace '(@State private var headerControlsWidth = NoopMetrics\.headerControlReserveWidth\r?\n)',
+                '$1
+    #if os(iOS)
+    /// #1532 recurrence fix: the real viewport width, measured by a background GeometryReader on the
+    /// ScrollView. Used to hard-cap the scroll content column so no child can ever widen the
+    /// ScrollView''s reported content size and enable horizontal panning. iOS-only; macOS keeps its
+    /// existing 680pt-centered layout. Zero until the first layout pass, so the initial frame uses
+    /// `.infinity` (no cap) — the cap locks in on the very next redraw.
+    @State private var viewportWidth: CGFloat = 0
+    #endif
+'
+            Write-Host "  Added viewportWidth @State to LiquidTodayView" -ForegroundColor Green
+        }
+
+        # Add the width cap in the #else branch of the macOS frame (if not already present).
+        if ($content -notmatch [regex]::Escape('.frame(width: viewportWidth > 0 ? viewportWidth : .infinity)')) {
+            # Replace the macOS-only frame block with an #if/#else that adds the iOS width cap.
+            $content = $content -replace '(?m)^(\s*)#if os\(macOS\)\r?\n\s*// Keep the phone-shaped column readable.*?\r?\n\s*\.frame\(maxWidth: 680\)\r?\n\s*\.frame\(maxWidth: \.infinity\)\r?\n\s*#endif\r?\n',
+                '$1#if os(macOS)
+$1   // Keep the phone-shaped column readable + centred on the wide mac detail pane. The sky is a
+$1   // ScrollView background (full-bleed), so constraining the content column here doesn''t touch it.
+$1   .frame(maxWidth: 680)
+$1   .frame(maxWidth: .infinity)
+$1#else
+$1   // #1532 recurrence fix: hard-cap the scroll content to the measured viewport width so no
+$1   // child can ever widen the ScrollView''s reported content size and enable horizontal panning.
+$1   .frame(width: viewportWidth > 0 ? viewportWidth : .infinity)
+$1#endif
+'
+            Write-Host "  Added width cap to LiquidTodayView scroll content" -ForegroundColor Green
+        }
+
+        # Add the background GeometryReader to measure viewport width (if not already present).
+        if ($content -notmatch [regex]::Escape('#1532 recurrence fix: measure the viewport width')) {
+            $content = $content -replace '(\.scrollBounceBehavior\(\.basedOnSize, axes: \.horizontal\)\r?\n\s*)(#endif)',
+                '$1// #1532 recurrence fix: measure the viewport width via a background GeometryReader so we
+        // can hard-cap the scroll content above. Background so it doesn''t affect layout; iOS-only.
+        .background {
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { viewportWidth = g.size.width }
+                    .onChange(of: g.size.width) { _, newWidth in viewportWidth = newWidth }
+            }
+        }
+        $2'
+            Write-Host "  Added background GeometryReader to LiquidTodayView" -ForegroundColor Green
+        }
+
+        if ($content -ne $original) {
+            Set-Content $todayPath -Value $content -NoNewline
+            $patchedFiles += $todayPath
+        }
+    }
+
+    # 2. ScreenScaffold.swift — same fix for every screen that renders through ScreenScaffold.
+    $scaffoldPath = "Strand/Screens/ScreenScaffold.swift"
+    if (Test-Path $scaffoldPath) {
+        $content = Get-Content $scaffoldPath -Raw
+        $original = $content
+
+        # Add the @State viewportWidth property if missing (after hSizeClass).
+        if ($content -notmatch [regex]::Escape('@State private var viewportWidth: CGFloat = 0')) {
+            $content = $content -replace '(@Environment\(\.horizontalSizeClass\) private var hSizeClass\r?\n\s*#endif)',
+                '$1
+    /// #1532 recurrence fix: the real viewport width, measured by a background GeometryReader.
+    /// Used to hard-cap the scroll content column so no child can widen the ScrollView''s reported
+    /// content size and enable horizontal panning. iOS-only; macOS is unchanged. Zero until the
+    /// first layout pass, so the initial frame uses `.infinity` (no cap) — the cap locks in on
+    /// the very next redraw.
+    @State private var viewportWidth: CGFloat = 0
+    #endif'
+            Write-Host "  Added viewportWidth @State to ScreenScaffold" -ForegroundColor Green
+        }
+
+        # Add the width cap after the existing frame chain (if not already present).
+        if ($content -notmatch [regex]::Escape('#1532 recurrence fix: hard-cap the entire scroll content')) {
+            $content = $content -replace '(\.frame\(maxWidth: \.infinity, alignment: \.center\)\r?\n)(\s*#else)',
+                '$1            // #1532 recurrence fix: hard-cap the entire scroll content to the measured viewport
+            // width so no child can ever widen the ScrollView''s reported content size and enable
+            // horizontal panning. iOS-only; macOS is unchanged. `.frame(width:)` sets the reported
+            // content width without clipping — children that need more wrap/truncate per SwiftUI''s
+            // normal layout. Zero on the first frame, so fall back to `.infinity` (no cap).
+            .frame(width: viewportWidth > 0 ? viewportWidth : .infinity)
+$2'
+            Write-Host "  Added width cap to ScreenScaffold scroll content" -ForegroundColor Green
+        }
+
+        # Add the background GeometryReader to measure viewport width (if not already present).
+        if ($content -notmatch [regex]::Escape('#1532 recurrence fix: measure the viewport width')) {
+            $content = $content -replace '(\.scrollBounceBehavior\(\.basedOnSize, axes: \.horizontal\)\r?\n\s*)(#endif)',
+                '$1// #1532 recurrence fix: measure the viewport width via a background GeometryReader so we
+        // can hard-cap the scroll content above. Background so it doesn''t affect layout; iOS-only.
+        .background {
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { viewportWidth = g.size.width }
+                    .onChange(of: g.size.width) { _, newWidth in viewportWidth = newWidth }
+            }
+        }
+        $2'
+            Write-Host "  Added background GeometryReader to ScreenScaffold" -ForegroundColor Green
+        }
+
+        if ($content -ne $original) {
+            Set-Content $scaffoldPath -Value $content -NoNewline
+            $patchedFiles += $scaffoldPath
+        }
+    }
+
+    # Commit the #1532 recurrence fix patches
+    if ($patchedFiles.Count -gt 0) {
+        git add $patchedFiles
+        $staged1532 = git diff --cached --name-only
+        if ($staged1532) {
+            $null = Invoke-GitCommand "git commit -m 'Re-apply #1532 recurrence fix (scroll content width cap) after upstream sync [skip ci]'" "Failed to commit #1532 recurrence fix"
+            Write-Host "  Committed #1532 recurrence fix to $($patchedFiles.Count) file(s)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "  No #1532 recurrence fix changes needed (already applied)" -ForegroundColor Yellow
+    }
+}
+
 # Preserve iOS CI/CD infrastructure (only after upstream merge)
 if ($isUpstreamSource) {
     Write-Host "`n[13/14] Preserving iOS CI/CD infrastructure..." -ForegroundColor Yellow

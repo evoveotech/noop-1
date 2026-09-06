@@ -146,6 +146,20 @@ struct LiquidTodayView: View {
     /// with the design-system default so the first frame is not laid out against a reserve of zero.
     @State private var headerControlsWidth = NoopMetrics.headerControlReserveWidth
 
+    #if os(iOS)
+    /// #1532 recurrence fix: the real viewport width, measured by a background GeometryReader on the
+    /// ScrollView. Used to hard-cap the scroll content column so no child (ChargeSyncIndicator during
+    /// a sync, a long unwrapped string, a measured-width control that hasn't settled) can ever widen
+    /// the ScrollView's reported content size and enable horizontal panning. `.scrollBounceBehavior
+    /// (.basedOnSize)` alone (the only part of #1532 that landed upstream) only suppresses bounce
+    /// when content does NOT overflow — but a day-switch (yesterday → today) can briefly make the
+    /// header row ask for more width than the screen, making the content genuinely overflow and
+    /// enabling real horizontal panning. This cap makes that structurally impossible. iOS-only;
+    /// macOS keeps its existing 680pt-centered layout. Zero until the first layout pass, so the
+    /// initial frame uses `.infinity` (no cap) — the cap locks in on the very next redraw.
+    @State private var viewportWidth: CGFloat = 0
+    #endif
+
     /// Mock Vitality purple (#9b7bff) has no exact StrandPalette token in this theme.
     private let liquidPurple = Color(.sRGB, red: 0x9b / 255, green: 0x7b / 255, blue: 0xff / 255, opacity: 1)
     /// The liquid heart pink shared with the sync indicator and LiquidThread.
@@ -371,6 +385,16 @@ struct LiquidTodayView: View {
             // ScrollView background (full-bleed), so constraining the content column here doesn't touch it.
             .frame(maxWidth: 680)
             .frame(maxWidth: .infinity)
+            #else
+            // #1532 recurrence fix: hard-cap the scroll content to the measured viewport width so no
+            // child can ever widen the ScrollView's reported content size and enable horizontal panning.
+            // This is the cap that was withdrawn from the upstream #1532 merge (reviewer concerns:
+            // unguarded GeometryReader changed macOS, hard clip at large Dynamic Type). Both addressed
+            // here: the measurement is iOS-only, and `.frame(width:)` sets the reported content width
+            // without clipping — children that need more wrap/truncate per SwiftUI's normal layout.
+            // Zero on the first frame (before the background GeometryReader fires), so fall back to
+            // `.infinity` (no cap) — the cap locks in on the very next redraw.
+            .frame(width: viewportWidth > 0 ? viewportWidth : .infinity)
             #endif
         }
         .coordinateSpace(name: Self.pullSpace)
@@ -383,6 +407,15 @@ struct LiquidTodayView: View {
         // brings Today's scroll behaviour in line with the rest of the app without touching the
         // vertical pull-to-refresh gesture above.
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        // #1532 recurrence fix: measure the viewport width via a background GeometryReader so we
+        // can hard-cap the scroll content above. Background so it doesn't affect layout; iOS-only.
+        .background {
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { viewportWidth = g.size.width }
+                    .onChange(of: g.size.width) { _, newWidth in viewportWidth = newWidth }
+            }
+        }
         #endif
         .onPreferenceChange(PullOffsetKey.self) { handlePull($0) }
         // The sky is a FIXED full-bleed backdrop drawn behind the scroll content, edge-to-edge under the
