@@ -2754,6 +2754,24 @@ struct SettingsView: View {
     /// the hand-maintained changelog version only if the Info.plist key is somehow missing.
     private var bundleVersionString: String { UpdateWatch.installedVersion }
 
+    /// Whether to show "Check for updates" and "Project home & source" (both point at GitHub,
+    /// MOVAs sideload/dev release channel). macOS ships unsigned with no App Store route, so
+    /// GitHub is the ONLY channel there — always show it. On iOS the same bundle id
+    /// (com.evoveo.noop) ships either as a genuine sideload/dev install OR via TestFlight/App
+    /// Store, so gate on the runtime IOSDiagnostics.isSideloaded signal (embedded provisioning
+    /// profile + no App Store receipt) rather than the bundle id: a TestFlight/App Store install
+    /// already updates through Apples mechanism, and a GitHub source/releases link doesn	
+    /// apply — and isn	 appropriate to surface — there.
+    private var showsGitHubDistributionLinks: Bool {
+        #if os(macOS)
+        return true
+        #elseif os(iOS)
+        return IOSDiagnostics.capture().isSideloaded == true
+        #else
+        return false
+        #endif
+    }
+
     private var aboutCard: some View {
         SettingsSection(
             icon: "info.circle.fill",
@@ -2898,9 +2916,18 @@ struct SettingsView: View {
                 // one-tap environment dump (device, iOS+build, Data Protection, background refresh,
                 // low-power, sideload expiry) for bug reports. iOS-only; macOS doesn't have these gotchas.
                 iosDiagnosticsRow
-                iphoneExpectations
+                // The sideloading callout (re-sign cadence, Data Protection lock, background-BLE limits)
+                // only applies to an actual sideload/dev install — gate on IOSDiagnostics.isSideloaded
+                // (embedded provisioning profile + no App Store receipt) rather than the bundle id, since
+                // com.evoveo.noop is also the bundle id NOOPs normal sideload distribution ships under.
+                // A TestFlight/App Store install carries a receipt, so isSideloaded is false and none of
+                // this text (which would be wrong there) is shown.
+                if IOSDiagnostics.capture().isSideloaded == true {
+                    iphoneExpectations
+                }
                 #endif
 
+                if showsGitHubDistributionLinks {
                 // Check for updates — a single, user-initiated read of GitHub's public releases API.
                 // No background polling, no auto-update; sends nothing about you, just reads the version.
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
@@ -3017,6 +3044,7 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Project home and source code on GitHub")
+                }
 
                 Text("A standalone companion for your WHOOP. Everything stays on this device: your history, your live stream, your numbers. Nothing is uploaded. MOVA is an independent, experimental project, not the WHOOP app.")
                     .font(StrandFont.subhead)
