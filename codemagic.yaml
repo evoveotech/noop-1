@@ -1,0 +1,80 @@
+# CodeMagic CI/CD configuration for NOOP iOS app
+# This file builds the iOS app and uploads to TestFlight
+#
+# Required environment variable group "appstore_credentials" in CodeMagic UI:
+#   APP_STORE_CONNECT_ISSUER_ID      - Issuer ID from App Store Connect > Users and Access > Keys
+#   APP_STORE_CONNECT_KEY_IDENTIFIER - Key ID from App Store Connect > Users and Access > Keys
+#   APP_STORE_CONNECT_PRIVATE_KEY    - Content of the .p8 key file (mark as Secret)
+#   APPLE_DEVELOPER_TEAM_ID          - 10-char Team ID from Apple Developer portal
+#   CERTIFICATE_PRIVATE_KEY          - RSA 2048 private key used to create the signing certificate (mark as Secret)
+
+workflows:
+  ios-build:
+    name: iOS Build and TestFlight Upload
+    integrations:
+      app_store_connect: NOOP iOS
+    environment:
+      groups:
+        - appstore_credentials
+      vars:
+        BUNDLE_ID: "com.evoveo.noop"
+        XCODE_SCHEME: "StrandiOS"
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.evoveo.noop
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+        - pattern: develop
+          include: true
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+
+      - name: Generate Xcode project
+        script: |
+          xcodegen generate
+
+      - name: Install Swift Package dependencies
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -project Strand.xcodeproj \
+            -scheme $XCODE_SCHEME \
+            -destination 'generic/platform=iOS'
+
+      - name: Build iOS app
+        script: |
+          xcodebuild \
+            -project Strand.xcodeproj \
+            -scheme $XCODE_SCHEME \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath $CM_BUILD_DIR/StrandiOS.xcarchive \
+            DEVELOPMENT_TEAM=$APPLE_DEVELOPER_TEAM_ID \
+            CODE_SIGN_STYLE=Manual \
+            archive
+
+      - name: Export IPA
+        script: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath $CM_BUILD_DIR/StrandiOS.xcarchive \
+            -exportPath $CM_BUILD_DIR/export \
+            -exportOptionsPlist exportOptions.plist
+
+    artifacts:
+      - $CM_BUILD_DIR/export/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers

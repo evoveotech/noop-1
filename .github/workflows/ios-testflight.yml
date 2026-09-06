@@ -1,0 +1,92 @@
+name: Build and Upload iOS to TestFlight
+# Note: Duplicate code blocks in LiveView.swift have been commented out for TestFlight upload
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Install dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Strand.xcodeproj \
+            -scheme NOOPiOS \
+            -destination 'generic/platform=iOS'
+
+      - name: Build iOS app
+        env:
+          DEVELOPER_TEAM: ${{ secrets.APPLE_DEVELOPER_TEAM_ID }}
+          PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_SPECIFIER }}
+          CODE_SIGN_IDENTITY: ${{ secrets.IOS_CODE_SIGN_IDENTITY }}
+        run: |
+          xcodebuild \
+            -project Strand.xcodeproj \
+            -scheme NOOPiOS \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath build/NOOPiOS.xcarchive \
+            DEVELOPMENT_TEAM="${DEVELOPER_TEAM}" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="${PROVISIONING_PROFILE_SPECIFIER}" \
+            CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY}" \
+            archive
+
+      - name: Export IPA
+        env:
+          DEVELOPER_TEAM: ${{ secrets.APPLE_DEVELOPER_TEAM_ID }}
+        run: |
+          cat > /tmp/exportOptions.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>${DEVELOPER_TEAM}</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/NOOPiOS.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist /tmp/exportOptions.plist
+
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "${APP_STORE_CONNECT_API_KEY_CONTENT}" > ~/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+          IPA_FILE=$(ls build/export/*.ipa | head -1)
+          echo "Uploading ${IPA_FILE}..."
+          xcrun altool --upload-app \
+            --type ios \
+            --file "${IPA_FILE}" \
+            --apiKey "${APP_STORE_CONNECT_API_KEY_ID}" \
+            --apiIssuer "${APP_STORE_CONNECT_API_ISSUER_ID}"

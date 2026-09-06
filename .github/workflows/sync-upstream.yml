@@ -1,0 +1,242 @@
+name: Sync Upstream Repository
+
+on:
+  workflow_dispatch: # Manual trigger only
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for proper merging
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remotes
+        run: |
+          git remote add upstream-ryanbr https://github.com/ryanbr/noop.git || git remote set-url upstream-ryanbr https://github.com/ryanbr/noop.git
+
+      - name: Fetch all remotes
+        run: |
+          git fetch upstream-ryanbr
+          git fetch origin
+
+      - name: Compare commits between all sources
+        id: compare_commits
+        run: |
+          echo "Comparing commits between local, upstream-github, upstream-noopfans, and origin..."
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM_RYANBR=$(git rev-parse upstream-ryanbr/main)
+          ORIGIN=$(git rev-parse origin/main)
+          
+          # Validate commit information
+          if [ -z "$LOCAL" ] || [ -z "$UPSTREAM_RYANBR" ] || [ -z "$ORIGIN" ]; then
+            echo "Failed to get commit information"
+            exit 1
+          fi
+          
+          echo "Local HEAD: $LOCAL"
+          echo "Upstream ryanbr HEAD: $UPSTREAM_RYANBR"
+          echo "Origin HEAD: $ORIGIN"
+          
+          # Simple comparison: if upstream has different commits, pull from upstream
+          # If origin has different commits, pull from origin
+          if [ "$LOCAL" != "$UPSTREAM_RYANBR" ]; then
+            echo "source=upstream-ryanbr" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "upstream-ryanbr has different commits than local - will sync from upstream"
+          elif [ "$LOCAL" != "$ORIGIN" ]; then
+            echo "source=origin" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Origin has different commits than local - will sync from origin"
+          else
+            echo "source=none" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "All sources are in sync"
+          fi
+
+      - name: Merge from source
+        if: steps.compare_commits.outputs.has_changes == 'true'
+        run: |
+          SOURCE="${{ steps.compare_commits.outputs.source }}"
+          echo "Merging from $SOURCE into main..."
+          
+          case "$SOURCE" in
+            upstream-ryanbr)
+              MERGE_BRANCH="upstream-ryanbr/main"
+              MERGE_MESSAGE="Merge upstream changes from github.com/ryanbr/noop [skip ci]"
+              ;;
+            origin)
+              MERGE_BRANCH="origin/main"
+              MERGE_MESSAGE="Merge origin changes [skip ci]"
+              ;;
+            *)
+              MERGE_BRANCH="origin/main"
+              MERGE_MESSAGE="Merge changes [skip ci]"
+              ;;
+          esac
+          
+          git merge $MERGE_BRANCH --allow-unrelated-histories -X theirs -m "$MERGE_MESSAGE" || true
+
+      - name: Resolve conflicts
+        if: steps.compare_commits.outputs.has_changes == 'true'
+        run: |
+          echo "Resolving merge conflicts..."
+          SOURCE="${{ steps.compare_commits.outputs.source }}"
+          
+          case "$SOURCE" in
+            upstream-ryanbr)
+              MERGE_MESSAGE="Merge upstream changes from github.com/ryanbr/noop [skip ci]"
+              ;;
+            origin)
+              MERGE_MESSAGE="Merge origin changes [skip ci]"
+              ;;
+            *)
+              MERGE_MESSAGE="Merge changes [skip ci]"
+              ;;
+          esac
+          
+          # Check for conflicts
+          CONFLICT_FILES=$(git status --short | grep -E "^UD|^DU" || true)
+          if [ -n "$CONFLICT_FILES" ]; then
+            echo "Found conflicts, resolving..."
+            echo "$CONFLICT_FILES" | grep "^UD" | awk '{print $2}' | xargs -r git checkout --theirs 2>/dev/null || true
+            echo "$CONFLICT_FILES" | grep "^DU" | awk '{print $2}' | xargs -r git checkout --theirs 2>/dev/null || true
+            git add -A
+            git commit -m "$MERGE_MESSAGE" || true
+          else
+            echo "No conflicts to resolve"
+          fi
+
+      - name: Pull latest from origin (after upstream merge)
+        if: steps.compare_commits.outputs.has_changes == 'true' && steps.compare_commits.outputs.source == 'upstream-ryanbr'
+        run: |
+          echo "Pulling latest changes from origin..."
+          git pull origin main --rebase -X theirs || true
+
+      - name: Resolve rebase conflicts
+        if: steps.compare_commits.outputs.has_changes == 'true' && steps.compare_commits.outputs.source == 'upstream-ryanbr'
+        run: |
+          echo "Resolving rebase conflicts..."
+          # Check for rebase conflicts
+          REBASE_CONFLICTS=$(git status --short | grep -E "^UD|^DU" || true)
+          if [ -n "$REBASE_CONFLICTS" ]; then
+            echo "Found rebase conflicts, resolving..."
+            echo "$REBASE_CONFLICTS" | grep "^UD" | awk '{print $2}' | xargs -r git checkout --theirs 2>/dev/null || true
+            echo "$REBASE_CONFLICTS" | grep "^DU" | awk '{print $2}' | xargs -r git checkout --theirs 2>/dev/null || true
+            git add -A
+            git rebase --continue || true
+          else
+            echo "No rebase conflicts to resolve"
+          fi
+
+      - name: Apply evoveo identifier changes (after upstream merge)
+        if: steps.compare_commits.outputs.has_changes == 'true' && steps.compare_commits.outputs.source == 'upstream-ryanbr'
+        run: |
+          echo "Applying evoveo identifier changes..."
+          FILES_UPDATED=0
+          
+          # Update StrandiOSShared/WidgetSnapshot.swift
+          if [ -f "StrandiOSShared/WidgetSnapshot.swift" ]; then
+            sed -i 's/group\.com\.noopapp\.noop/group.com.evoveo.noop/g' StrandiOSShared/WidgetSnapshot.swift
+            echo "Updated StrandiOSShared/WidgetSnapshot.swift"
+            FILES_UPDATED=$((FILES_UPDATED + 1))
+          fi
+          
+          # Update project.yml
+          if [ -f "project.yml" ]; then
+            sed -i 's/group\.com\.noopapp\.noop/group.com.evoveo.noop/g' project.yml
+            sed -i 's/com\.noopapp\.noop/com.evoveo.noop/g' project.yml
+            sed -i 's/com\.evoveo\.noops/com.evoveo.noop/g' project.yml
+            sed -i '/- "Data\/AppleDemoSeeder.swift"/d' project.yml
+            # Strip .staging from iOS-family bundle IDs (PR #27 fix — AltStore requires the
+            # production bundle ID, not .staging). Leave the macOS bundle ID and APP_GROUP_ID
+            # unchanged. The iOS app target is identified by its unique following lines
+            # (ASSETCATALOG_COMPILER_APPICON_NAME right after PRODUCT_NAME); the macOS target
+            # has PRODUCT_MODULE_NAME: Strand in between, so it won't match.
+            perl -i -0pe 's/(PRODUCT_BUNDLE_IDENTIFIER: com\.evoveo\.noop)\.staging(\n        PRODUCT_NAME: "NOOP Staging"\n        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon\n        # Ship every)/$1$2/' project.yml
+            sed -i 's/com\.evoveo\.noop\.staging\.widgets/com.evoveo.noop.widgets/g' project.yml
+            sed -i 's/com\.evoveo\.noop\.staging\.watch/com.evoveo.noop.watch/g' project.yml
+            sed -i 's/WKCompanionAppBundleIdentifier: com\.evoveo\.noop\.staging/WKCompanionAppBundleIdentifier: com.evoveo.noop/' project.yml
+            echo "Updated project.yml"
+            FILES_UPDATED=$((FILES_UPDATED + 1))
+          fi
+
+          # Update altstore-source.json — the manifest must declare com.evoveo.noop (not
+          # com.noopapp.noop) so AltStore accepts the ipa whose bundle ID is com.evoveo.noop.
+          if [ -f "altstore-source.json" ]; then
+            sed -i 's/"bundleIdentifier": "com\.noopapp\.noop"/"bundleIdentifier": "com.evoveo.noop"/' altstore-source.json
+            echo "Updated altstore-source.json"
+            FILES_UPDATED=$((FILES_UPDATED + 1))
+          fi
+          
+          # Update NoopLocalAccess package
+          if [ -f "Packages/NoopLocalAccess/Sources/NoopLocalAccessCore/LocalAccessCore.swift" ]; then
+            sed -i 's/com\.noopapp\.noop/com.evoveo.noop/g' Packages/NoopLocalAccess/Sources/NoopLocalAccessCore/LocalAccessCore.swift
+            echo "Updated LocalAccessCore.swift"
+            FILES_UPDATED=$((FILES_UPDATED + 1))
+          fi
+          
+          # Update RawHistoryArchive
+          if [ -f "Strand/Collect/RawHistoryArchive.swift" ]; then
+            sed -i 's/com\.noopapp\.noop/com.evoveo.noop/g' Strand/Collect/RawHistoryArchive.swift
+            echo "Updated RawHistoryArchive.swift"
+            FILES_UPDATED=$((FILES_UPDATED + 1))
+          fi
+          
+          # Update StorePaths
+          if [ -f "Strand/Collect/StorePaths.swift" ]; then
+            sed -i 's/com\.noopapp\.noop/com.evoveo.noop/g' Strand/Collect/StorePaths.swift
+            echo "Updated StorePaths.swift"
+            FILES_UPDATED=$((FILES_UPDATED + 1))
+          fi
+          
+          if [ $FILES_UPDATED -gt 0 ]; then
+            git add StrandiOSShared/WidgetSnapshot.swift project.yml altstore-source.json Packages/NoopLocalAccess/Sources/NoopLocalAccessCore/LocalAccessCore.swift Strand/Collect/RawHistoryArchive.swift Strand/Collect/StorePaths.swift
+            git commit -m "Apply evoveo identifier changes after upstream sync [skip ci]" || true
+          else
+            echo "No files needed updating"
+          fi
+
+      - name: Preserve iOS CI/CD infrastructure (after upstream merge)
+        if: steps.compare_commits.outputs.has_changes == 'true' && steps.compare_commits.outputs.source == 'upstream-ryanbr'
+        run: |
+          echo "Preserving iOS CI/CD infrastructure..."
+          
+          IOS_FILES=(
+            ".github/workflows/ios-testflight.yml"
+            "codemagic.yaml"
+            "exportOptions.plist"
+          )
+          
+          for file in "${IOS_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✓ $file exists, keeping it"
+            else
+              echo "⚠ WARNING: $file missing - may need manual restoration"
+            fi
+          done
+          
+          # Check for sync-upstream workflow (should be preserved)
+          if [ -f ".github/workflows/sync-upstream.yml" ]; then
+            echo "✓ sync-upstream.yml exists, keeping it"
+          else
+            echo "⚠ WARNING: sync-upstream.yml missing"
+          fi
+
+      - name: Push changes to origin
+        if: steps.compare_commits.outputs.has_changes == 'true'
+        run: |
+          echo "Pushing changes to origin/main..."
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
