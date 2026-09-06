@@ -16,7 +16,7 @@ import WhoopProtocol
 /// Frames carry sensor payloads, not identifiers — no serials/MACs land here. The companion Android
 /// archive uses the same record shape so one mapping toolchain reads both.
 struct RawHistoryArchive {
-    /// File name under `<AppSupport>/com.noopapp.noop/`.
+    /// File name under `<AppSupport>/com.evoveo.noop/`.
     static let fileName = "rejected_history.jsonl"
     /// Soft cap (~5 MB). When appending would push the file past this, the archive EVICTS surplus lines
     /// to make room rather than refusing the write — weakest-value first, and never below a per-version
@@ -98,7 +98,7 @@ struct RawHistoryArchive {
     private let perVersionFloor: Int
     private let zeroPayloadFloor: Int
 
-    /// Default location: `<AppSupport>/com.noopapp.noop/`, created on demand. Overridable for tests.
+    /// Default location: `<AppSupport>/com.evoveo.noop/`, created on demand. Overridable for tests.
     init(directory: URL? = nil,
          maxBytes: Int = RawHistoryArchive.maxBytes,
          perVersionFloor: Int = RawHistoryArchive.perVersionFloor,
@@ -110,7 +110,7 @@ struct RawHistoryArchive {
                                                      in: .userDomainMask,
                                                      appropriateFor: nil, create: true))
                 ?? URL(fileURLWithPath: NSTemporaryDirectory())
-            self.directory = base.appendingPathComponent("com.noopapp.noop", isDirectory: true)
+            self.directory = base.appendingPathComponent("com.evoveo.noop", isDirectory: true)
         }
         self.maxBytes = maxBytes
         self.perVersionFloor = perVersionFloor

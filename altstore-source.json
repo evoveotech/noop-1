@@ -10,7 +10,7 @@
   "apps": [
     {
       "name": "NOOP",
-      "bundleIdentifier": "com.noopapp.noop",
+      "bundleIdentifier": "com.evoveo.noop",
       "developerName": "NoopApp",
       "subtitle": "Read your own WHOOP strap, fully offline.",
       "localizedDescription": "NOOP talks to a WHOOP 4.0 / 5.0 / MG strap you own directly over Bluetooth — no WHOOP app, no subscription, no cloud. Live heart rate, history sync, and NOOP's own Charge / Effort / Rest scores, all computed on-device and stored only on your iPhone.\n\nIndependent and experimental; not affiliated with WHOOP. Source: https://github.com/ryanbr/noop",

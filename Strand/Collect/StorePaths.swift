@@ -40,7 +40,7 @@ enum StorePaths {
         } else {
             // Fork ".staging" build: it installs BESIDE the official app, so its store lives at the plain
             // ~/Library/Application Support/OpenWhoop, NOT the official app's sandbox container. The first
-            // launch (our store still empty) COPIES the official com.noopapp.noop container store in, so a
+            // launch (our store still empty) COPIES the official com.evoveo.noop container store in, so a
             // user coming from official NOOP keeps their history (#39). (Prod/sandboxed builds took the
             // branch above and never reach here.)
             importOfficialContainerStoreIfNeeded(into: base, dbURL: dbURL)
@@ -57,7 +57,7 @@ enum StorePaths {
     /// other platforms keep the plain Application Support directory.
     private static func macOSProductionContainerAppSupport(defaultingTo appSupport: URL) -> URL {
         #if os(macOS)
-        let productionBundleID = "com.noopapp.noop"
+        let productionBundleID = "com.evoveo.noop"
         guard Bundle.main.bundleIdentifier == productionBundleID else { return appSupport }
 
         let containerSegment = "/Library/Containers/\(productionBundleID)/Data/"
@@ -115,7 +115,7 @@ enum StorePaths {
 
     /// Fork ".staging" builds keep their store outside the official app's sandbox container, so a user
     /// moving from official NOOP would otherwise see an empty database (#39). The first time (our store
-    /// still empty), COPY the official `com.noopapp.noop` container store in. COPY — never move — because
+    /// still empty), COPY the official `com.evoveo.noop` container store in. COPY — never move — because
     /// the official app may still be installed and using it. The distributed build is unsigned (so it isn't
     /// sandboxed and CAN read the sibling container); if a sandbox is unexpectedly engaged,
     /// `homeDirectoryForCurrentUser` points inside OUR container and the official store is unreachable, so
@@ -127,7 +127,7 @@ enum StorePaths {
         guard !home.standardizedFileURL.path.contains("/Library/Containers/") else { return }
 
         let officialDir = home.appendingPathComponent(
-            "Library/Containers/com.noopapp.noop/Data/Library/Application Support/OpenWhoop", isDirectory: true)
+            "Library/Containers/com.evoveo.noop/Data/Library/Application Support/OpenWhoop", isDirectory: true)
         let officialDB = officialDir.appendingPathComponent("whoop.sqlite")
         guard fm.fileExists(atPath: officialDB.path), fileSize(of: officialDB) > 0 else { return }
 

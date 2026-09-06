@@ -134,7 +134,7 @@ targets:
         com.apple.security.network.client: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).noop.staging
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).noop
         PRODUCT_NAME: "NOOP Staging"
         # Pin the Swift module name so `@testable import Strand` resolves even though PRODUCT_NAME is
         # NOOP — the test target and shared sources refer to the app module as `Strand`.

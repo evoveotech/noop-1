@@ -80,7 +80,7 @@ public struct WidgetSnapshot: Codable, Equatable {
         if let configured, !configured.isEmpty {
             return configured
         }
-        return "group.com.noopapp.noop"
+        return "group.com.evoveo.noop"
     }
 
     /// Debug-only canary: trips on the first run after a misprovisioning so the silent no-op gets
