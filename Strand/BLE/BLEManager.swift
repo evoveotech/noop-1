@@ -6350,6 +6350,11 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
             // genuinely up keeps its notifications either way.
             let isHelloChar = characteristic.uuid == BLEManager.whoop5CmdWriteChar
             let helloOutstanding = clientHelloWriteAt != nil
+            // #1883: compute the elapsed time BEFORE clearing the window, so the timing tell can use it.
+            // The elapsed time is the whole signal Apple has — CoreBluetooth exposes no bond state, so
+            // a completion faster than one connection interval is the one tell that the callback came
+            // from the local stack rather than the strap (#1635).
+            let helloElapsedMs = clientHelloWriteAt.map { Int(Date().timeIntervalSince($0) * 1000) }
             // Consume the window ONLY for the hello's own completion. A foreign completion that cleared it
             // would make a genuine ack arriving afterwards look unsolicited, costing a real bond.
             //
@@ -6384,6 +6389,14 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
                 noteGenuineBond(of: peripheral)   // #52: this strap bonds fine; clears any pin-refusal streak
                 emitConnectionBondState("encryptedBond family=whoop5 (CLIENT_HELLO acked)")
                 log("WHOOP 5/MG: CLIENT_HELLO acked — link established; subscribing notify chars (experimental).")
+                // #1883: Apple has no link-encryption state to verify the bond against. A completion
+                // faster than one connection interval did not come from the strap — that is the
+                // signature of #1635's false bond. Log it as UNVERIFIED without changing behavior,
+                // because on Apple there is no alternative source of truth and refusing to bond would
+                // break every strap that genuinely bonds.
+                if let elapsed = helloElapsedMs, let timingLine = ClientHelloOutcome.unverifiedBondTimingLine(elapsedMs: elapsed) {
+                    log(timingLine)
+                }
             }
             for c in whoop5NotifyCharacteristics where !c.isNotifying || restoreNeedsResubscribe {
                 requestNotify(c, on: peripheral, reason: "post-bond puffin")   // #613: force re-arm on restore
