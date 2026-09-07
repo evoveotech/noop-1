@@ -10296,13 +10296,12 @@ class WhoopBleClient(
                         // #1754: the generic "clock lost sync" copy is only correct when the strap
                         // reported trim=0xFFFFFFFF (no valid flash cursor). A strap with a valid,
                         // advancing flash cursor that banks no sensor records has a different problem
-                        // — the sensor front-end or power, not the clock — and telling the user to
+                        // - the sensor front-end or power, not the clock - and telling the user to
                         // charge it sends them away from the real cause.
                         staleNewestSeen?.let { Backfiller.staleRecordBanner(it, nowSec) }
-                            ?: (backfiller.sawNoFlashCursor
-                                ? Backfiller.noFlashCursorBanner
-                                : Backfiller.noSensorRecordsBanner)
-                    bankedNothing -> null   // banked nothing but not yet sustained — stay silent (matches Swift)
+                            ?: if (backfiller.sawNoFlashCursor) Backfiller.noFlashCursorBanner
+                                else Backfiller.noSensorRecordsBanner
+                    bankedNothing -> null   // banked nothing but not yet sustained - stay silent (matches Swift)
                     // #324/#928: the strap banked records but its newest is dated implausibly in the future
                     // (RTC relatched ahead). #773 drops the samples so nothing is misfiled, but this path
                     // would otherwise report a clean sync and leave the user with no data + no reason.
