@@ -360,6 +360,10 @@ internal fun puffinSubscribeRefusedLine(uuid: String, status: String): String =
  *
  * Charged to the silence budget, because "the link will not survive being asked" is a stronger reason to
  * stop asking than a strap that merely stayed quiet.
+ *
+ * #1804: this line is now ONLY for strap-side drops (GATT_CONN_TIMEOUT, supervision timeout). A LOCAL
+ * teardown (status=22) is handled by [unbondedProbeLinkLostLocalTeardownLine] instead, which does NOT
+ * charge the budget — a local teardown is our own stack ending the link, not a strap verdict.
  */
 internal fun unbondedProbeLinkLostLine(
     uptimeMs: Long,
@@ -383,11 +387,63 @@ internal fun unbondedProbeLinkLostLine(
  *
  * It still spends a budget attempt, because an inconclusive link is not a reason to retry forever — that
  * is the hole this exists to close, and leaving stage 2 uncounted would reopen it one stage later.
+ *
+ * #1804: this line is now ONLY for strap-side drops. A LOCAL teardown (status=22) is handled by
+ * [unbondedProbeLinkLostLocalTeardownLine] instead, which does NOT charge the budget.
  */
 internal fun unbondedProbeLinkLostAskingLine(uptimeMs: Long, waitedMs: Long): String =
     "Unbonded offload probe: the link dropped ${uptimeMs}ms into this connect, ${waitedMs}ms after" +
         " GET_CLOCK went out. The subscribes had landed, so the transport was open and the strap was still" +
         " inside its window to answer — this link settles nothing either way (#1635)."
+
+/**
+ * #1804: was the probe's link lost by US or by the strap?
+ *
+ * A local teardown (`GATT_CONN_TERMINATE_LOCAL_HOST`, status 22) is OUR stack ending the link — it is
+ * not a strap verdict, and counting it as one is the defect this exists to close. The field capture
+ * that surfaced this had three probe attempts end at 10776/10761/10787 ms — a 30 ms spread that is a
+ * timer, not a radio event — with `status=22` and `via=unknown` on every one. The probe concluded
+ * the strap refuses the offload unbonded from a link OUR side tore down, and latched it permanently.
+ *
+ * Only a strap-side drop (`GATT_CONN_TIMEOUT`, supervision timeout) or an ATT error is an answer
+ * about the strap. A local teardown is inconclusive: it must not consume a budget attempt and must
+ * not advance the silence counter.
+ *
+ * Pure so the classification is unit-testable without a BLE stack, like every other judgement in
+ * this file. The status constants are kept as raw ints here (matching `WhoopBleClient`'s private
+ * constants) so this file does not depend on `BluetoothGatt` and can run under plain JVM tests.
+ */
+internal fun unbondedProbeLinkLostIsLocalTeardown(
+    status: Int,
+    localTeardownOrigin: String?,
+): Boolean {
+    // GATT_CONN_TERMINATE_LOCAL_HOST = 0x16 = 22. Any local teardown, whether we know which path
+    // did it or not, is inconclusive about the strap. `via=unknown` is the case the field capture
+    // surfaced; `via=bondWatchdog` etc. are known local paths and equally not strap verdicts.
+    return status == 22
+}
+
+/**
+ * #1804: the line for a probe link lost to a LOCAL teardown, which is inconclusive about the strap.
+ *
+ * Distinct from [unbondedProbeLinkLostLine] (stage 1, strap-side drop — carries the CLIENT_HELLO
+ * signature) and [unbondedProbeLinkLostAskingLine] (stage 2, strap-side drop — carries no finding).
+ * This one carries no finding EITHER way and does NOT charge the silence budget, because the link
+ * was ended by our own stack, not by the strap. Charging it would spend the budget on a question
+ * that was never asked of the strap, which is exactly the false negative that latched the probe
+ * permanently on the reporting install.
+ */
+internal fun unbondedProbeLinkLostLocalTeardownLine(
+    uptimeMs: Long,
+    stage: Int,
+    localTeardownOrigin: String?,
+): String {
+    val stageDesc = if (stage == 1) "while subscribing the puffin notify chars" else "after GET_CLOCK went out"
+    val origin = localTeardownOrigin ?: "unknown"
+    return "Unbonded offload probe: the link was terminated locally ${uptimeMs}ms into this connect" +
+        " $stageDesc (via=$origin). A local teardown is not a strap verdict, so this link is" +
+        " inconclusive and does not consume a silence-budget attempt (#1804, #1635)."
+}
 
 /**
  * How many times the probe may stand aside for the DIS chain before going anyway.

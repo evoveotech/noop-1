@@ -11045,20 +11045,37 @@ class WhoopBleClient(
         // budget attempt. The two get DIFFERENT lines — stage 1's loss carries the CLIENT_HELLO signature,
         // stage 2's carries no finding at all — because conflating them is the mistake this probe keeps
         // having to unpick.
+        //
+        // #1804: a LOCAL teardown (status=22, GATT_CONN_TERMINATE_LOCAL_HOST) is NOT a strap verdict —
+        // it is our own stack ending the link. The field capture that surfaced this had three probe
+        // attempts end at ~10.8 s with status=22 and via=unknown on every one, and the probe concluded
+        // the strap refuses the offload from a link OUR side tore down. A local teardown is inconclusive:
+        // it must not consume a budget attempt. Only a strap-side drop (timeout, ATT error) charges the
+        // budget.
         if (unbondedProbeSubscribing || unbondedProbeAwaitingReply) {
             val uptime = if (connectedAtMs > 0L) System.currentTimeMillis() - connectedAtMs else -1L
-            log(
-                if (unbondedProbeSubscribing) unbondedProbeLinkLostLine(
+            if (unbondedProbeLinkLostIsLocalTeardown(status, lastLocalTeardown)) {
+                val stage = if (unbondedProbeSubscribing) 1 else 2
+                log(unbondedProbeLinkLostLocalTeardownLine(
                     uptimeMs = uptime,
-                    confirmedSubscribes = unbondedProbeSubscribed,
-                    total = WHOOP5_NOTIFY_CHARS.size,
-                ) else unbondedProbeLinkLostAskingLine(
-                    uptimeMs = uptime,
-                    waitedMs = if (unbondedProbeAskedAtMs > 0L)
-                        System.currentTimeMillis() - unbondedProbeAskedAtMs else -1L,
-                ),
-            )
-            chargeUnbondedProbeSilence()
+                    stage = stage,
+                    localTeardownOrigin = lastLocalTeardown,
+                ))
+                // Do NOT charge the silence budget — a local teardown is not a strap verdict.
+            } else {
+                log(
+                    if (unbondedProbeSubscribing) unbondedProbeLinkLostLine(
+                        uptimeMs = uptime,
+                        confirmedSubscribes = unbondedProbeSubscribed,
+                        total = WHOOP5_NOTIFY_CHARS.size,
+                    ) else unbondedProbeLinkLostAskingLine(
+                        uptimeMs = uptime,
+                        waitedMs = if (unbondedProbeAskedAtMs > 0L)
+                            System.currentTimeMillis() - unbondedProbeAskedAtMs else -1L,
+                    ),
+                )
+                chargeUnbondedProbeSilence()
+            }
         }
         unbondedProbeStartedThisLink = false
         unbondedProbeSkipLogged = false

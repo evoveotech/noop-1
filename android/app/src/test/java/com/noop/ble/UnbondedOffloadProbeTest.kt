@@ -608,4 +608,62 @@ class UnbondedOffloadProbeTest {
         )!!
         assertTrue(spent, spent.contains("silent-link budget is spent"))
     }
+
+    // MARK: - #1804: local teardown is inconclusive, not a strap verdict
+
+    /** The field capture: status=22 (GATT_CONN_TERMINATE_LOCAL_HOST) with via=unknown. This is the
+     *  exact case that latched the probe permanently on the reporting install — a local teardown
+     *  counted as a strap refusal. */
+    @Test
+    fun `a local teardown with unknown origin is inconclusive`() {
+        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = null))
+        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "unknown"))
+    }
+
+    /** A known local path (bondWatchdog, keepAliveStall, etc.) is equally not a strap verdict —
+     *  the link was ended by our own stack, not by the strap. */
+    @Test
+    fun `a local teardown with a known origin is also inconclusive`() {
+        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "bondWatchdog"))
+        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "keepAliveStall"))
+        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "userDisconnect"))
+    }
+
+    /** A supervision timeout (status=8, GATT_CONN_TIMEOUT) is the STRAP dropping the link — that IS
+     *  evidence about the strap and should charge the silence budget. */
+    @Test
+    fun `a strap-side timeout is not a local teardown`() {
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 8, localTeardownOrigin = null))
+    }
+
+    /** Any other status (e.g. 19, 133) is also not a local teardown. */
+    @Test
+    fun `other statuses are not local teardowns`() {
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 19, localTeardownOrigin = null))
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 133, localTeardownOrigin = null))
+    }
+
+    /** The inconclusive line names the stage and the origin, and says it does not consume a budget
+     *  attempt — so a reader of the log knows the probe will retry rather than retire. */
+    @Test
+    fun `the inconclusive line names stage and origin and says it does not charge`() {
+        val line = unbondedProbeLinkLostLocalTeardownLine(
+            uptimeMs = 10776, stage = 1, localTeardownOrigin = null,
+        )
+        assertTrue(line, line.contains("terminated locally"))
+        assertTrue(line, line.contains("10776ms"))
+        assertTrue(line, line.contains("while subscribing"))
+        assertTrue(line, line.contains("via=unknown"))
+        assertTrue(line, line.contains("inconclusive"))
+        assertTrue(line, line.contains("does not consume"))
+    }
+
+    @Test
+    fun `the inconclusive line for stage 2 names GET_CLOCK`() {
+        val line = unbondedProbeLinkLostLocalTeardownLine(
+            uptimeMs = 10761, stage = 2, localTeardownOrigin = "bondWatchdog",
+        )
+        assertTrue(line, line.contains("after GET_CLOCK went out"))
+        assertTrue(line, line.contains("via=bondWatchdog"))
+    }
 }
