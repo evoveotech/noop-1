@@ -1,0 +1,17 @@
+## Summary
+
+- The unbonded-offload probe was enabled on a WHOOP 5/MG and concluded the strap refuses the offload unbonded, permanently retiring itself. That conclusion was not supported by the evidence: all three probe attempts ended with `status=22` (GATT_CONN_TERMINATE_LOCAL_HOST) and `via=unknown` — the link was terminated LOCALLY by our own stack, not by the strap.
+- The probe counted each local teardown as a strap verdict, charged it to the silence budget, and latched after three. A strap that holds links for hours without the probe was being retired on the basis of links OUR side tore down.
+- The fix classifies the disconnect cause before charging the budget: a local teardown (status=22) is inconclusive and does NOT consume a silence-budget attempt. Only a strap-side drop (timeout, ATT error) charges the budget.
+
+### Files
+- `UnbondedOffloadProbe.kt` — `unbondedProbeLinkLostIsLocalTeardown(status, origin)` (pure, unit-tested) classifies the disconnect; `unbondedProbeLinkLostLocalTeardownLine` is the inconclusive line that does NOT charge the budget. Existing strap-side-drop lines updated to note they are now only for strap-side drops.
+- `WhoopBleClient.kt` — the disconnect handler now checks `unbondedProbeLinkLostIsLocalTeardown` before choosing which line to print and whether to call `chargeUnbondedProbeSilence()`.
+- `UnbondedOffloadProbeTest.kt` — 6 new tests covering the classification (local teardown with unknown/known origin, strap-side timeout, other statuses) and the inconclusive line (stage 1 and 2, origin naming).
+
+### Test plan
+- [ ] `./gradlew testFullDebugUnitTest --tests "com.noop.ble.UnbondedOffloadProbeTest"` — all existing + 6 new tests
+- [ ] `./gradlew compileFullDebugKotlin` — no compile errors
+- [ ] Hardware: re-toggling the unbonded-offload experiment on the affected strap should now retry on a local teardown rather than retiring after three
+
+Generated with [Devin](https://devin.ai)

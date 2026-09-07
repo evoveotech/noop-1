@@ -10877,6 +10877,42 @@ class WhoopBleClient(
         // #520/#891: the DIS strings belong to the link that just dropped; a stale variant must not keep an
         // MG-only capability unlocked for whatever connects next.
         _whoop5Variant.value = Whoop5Variant.UNKNOWN
+        // #1635 / #1804: the probe-link-lost verdict must be emitted BEFORE reset() clears the probe
+        // flags, and it needs the disconnect `status` (which reset() does not receive). A probe still
+        // mid-subscribe when the link goes is stage 1 ending with the LINK; a probe mid-GET_CLOCK-wait
+        // is stage 2. Both get a verdict line so the silence budget advances correctly — EXCEPT when the
+        // link was terminated LOCALLY (status=22), which is our own stack ending the link and not a strap
+        // verdict. A local teardown is inconclusive and does NOT charge the budget (#1804).
+        //
+        // Cancel the probe runnables BEFORE emitting the verdict, so a runnable already dequeued and
+        // waiting to run cannot fire on the stale state. reset() cancels them again idempotently.
+        handler.removeCallbacks(unbondedProbeStartRunnable)
+        handler.removeCallbacks(unbondedProbeVerdictRunnable)
+        if (unbondedProbeSubscribing || unbondedProbeAwaitingReply) {
+            val uptime = if (connectedAtMs > 0L) System.currentTimeMillis() - connectedAtMs else -1L
+            if (unbondedProbeLinkLostIsLocalTeardown(status, lastLocalTeardown)) {
+                val stage = if (unbondedProbeSubscribing) 1 else 2
+                log(unbondedProbeLinkLostLocalTeardownLine(
+                    uptimeMs = uptime,
+                    stage = stage,
+                    localTeardownOrigin = lastLocalTeardown,
+                ))
+                // Do NOT charge the silence budget — a local teardown is not a strap verdict (#1804).
+            } else {
+                log(
+                    if (unbondedProbeSubscribing) unbondedProbeLinkLostLine(
+                        uptimeMs = uptime,
+                        confirmedSubscribes = unbondedProbeSubscribed,
+                        total = WHOOP5_NOTIFY_CHARS.size,
+                    ) else unbondedProbeLinkLostAskingLine(
+                        uptimeMs = uptime,
+                        waitedMs = if (unbondedProbeAskedAtMs > 0L)
+                            System.currentTimeMillis() - unbondedProbeAskedAtMs else -1L,
+                    ),
+                )
+                chargeUnbondedProbeSilence()
+            }
+        }
         reset()
 
         // close() can itself throw DeadObjectException on a dead binder — teardown must NEVER throw,
@@ -11034,49 +11070,10 @@ class WhoopBleClient(
         // see the cleared state, which is harmless, but one still queued must not reach the next link.
         handler.removeCallbacks(unbondedProbeStartRunnable)
         handler.removeCallbacks(unbondedProbeVerdictRunnable)
-        // A probe still mid-subscribe when the link goes is stage 1 ending with the LINK, and it is a
-        // verdict rather than an absence — see [unbondedProbeLinkLostLine]. Without this the probe
-        // reported nothing at all and its silence budget never advanced, so it re-ran on every reconnect:
-        // 16 starts and 0 verdicts in one capture. Charged to the budget, because "the link will not
-        // survive being asked" is a stronger reason to stop asking than a strap that merely stayed quiet.
-        //
-        // BOTH stages, because stage 2 has the identical hole: the verdict timer is cancelled just above,
-        // so a link lost during the GET_CLOCK wait would also report nothing and also fail to spend a
-        // budget attempt. The two get DIFFERENT lines — stage 1's loss carries the CLIENT_HELLO signature,
-        // stage 2's carries no finding at all — because conflating them is the mistake this probe keeps
-        // having to unpick.
-        //
-        // #1804: a LOCAL teardown (status=22, GATT_CONN_TERMINATE_LOCAL_HOST) is NOT a strap verdict —
-        // it is our own stack ending the link. The field capture that surfaced this had three probe
-        // attempts end at ~10.8 s with status=22 and via=unknown on every one, and the probe concluded
-        // the strap refuses the offload from a link OUR side tore down. A local teardown is inconclusive:
-        // it must not consume a budget attempt. Only a strap-side drop (timeout, ATT error) charges the
-        // budget.
-        if (unbondedProbeSubscribing || unbondedProbeAwaitingReply) {
-            val uptime = if (connectedAtMs > 0L) System.currentTimeMillis() - connectedAtMs else -1L
-            if (unbondedProbeLinkLostIsLocalTeardown(status, lastLocalTeardown)) {
-                val stage = if (unbondedProbeSubscribing) 1 else 2
-                log(unbondedProbeLinkLostLocalTeardownLine(
-                    uptimeMs = uptime,
-                    stage = stage,
-                    localTeardownOrigin = lastLocalTeardown,
-                ))
-                // Do NOT charge the silence budget — a local teardown is not a strap verdict.
-            } else {
-                log(
-                    if (unbondedProbeSubscribing) unbondedProbeLinkLostLine(
-                        uptimeMs = uptime,
-                        confirmedSubscribes = unbondedProbeSubscribed,
-                        total = WHOOP5_NOTIFY_CHARS.size,
-                    ) else unbondedProbeLinkLostAskingLine(
-                        uptimeMs = uptime,
-                        waitedMs = if (unbondedProbeAskedAtMs > 0L)
-                            System.currentTimeMillis() - unbondedProbeAskedAtMs else -1L,
-                    ),
-                )
-                chargeUnbondedProbeSilence()
-            }
-        }
+        // The probe-link-lost verdict (stage 1 or 2) is emitted from handleDisconnect BEFORE reset(),
+        // because it needs the disconnect `status` to classify a local teardown (#1804) and reset() is
+        // status-agnostic. The flag clears below stay here so the next link starts clean regardless of
+        // which path reached reset().
         unbondedProbeStartedThisLink = false
         unbondedProbeSkipLogged = false
         unbondedProbeDeferrals = 0
