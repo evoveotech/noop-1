@@ -291,6 +291,20 @@
                 android:resource="@xml/noop_compact_widget_info" />
         </receiver>
 
+        <!-- #1957: Heart-rate trace home-screen widget. Live bpm + a sparkline of the last 2 hours,
+             rendered from the WidgetSnapshotStore SharedPreferences snapshot. -->
+        <receiver
+            android:name="com.noop.widget.NoopHrTraceWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_hr_trace_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/noop_hr_trace_widget_info" />
+        </receiver>
+
         <!-- K10: Coach brief home-screen widget. Shows the stored morning brief (generated on a
              schedule by CoachBriefScheduler, K5) — never live-networked. Tap → opens the app. -->
         <receiver

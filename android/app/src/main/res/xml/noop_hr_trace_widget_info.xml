@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #1957: heart-rate trace widget metadata. updatePeriodMillis=0: the OS never polls us — the app
+     pushes updates through WidgetSnapshotStore whenever live HR changes. minWidth ~4 cells so the
+     trace has room; minHeight ~2 cells for the bpm + sparkline + stamp. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/glance_default_loading_layout" />

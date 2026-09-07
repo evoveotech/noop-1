@@ -40,6 +40,7 @@ data class WidgetSnapshot(
  */
 object WidgetSnapshotStore {
     private const val FILE = "noop_widget"
+    private const val HR_TRACE_KEY = "hrTrace"
 
     suspend fun push(context: Context, snap: WidgetSnapshot) {
         val app = context.applicationContext
@@ -58,13 +59,18 @@ object WidgetSnapshotStore {
         val compactIds = runCatching {
             GlanceAppWidgetManager(app).getGlanceIds(NoopCompactGlanceWidget::class.java)
         }.getOrDefault(emptyList())
-        if (standardIds.isEmpty() && compactIds.isEmpty()) return
+        val traceIds = runCatching {
+            GlanceAppWidgetManager(app).getGlanceIds(NoopHrTraceGlanceWidget::class.java)
+        }.getOrDefault(emptyList())
+        if (standardIds.isEmpty() && compactIds.isEmpty() && traceIds.isEmpty()) return
         runCatching { NoopGlanceWidget().updateAll(app) }
         runCatching { NoopCompactGlanceWidget().updateAll(app) }
+        runCatching { NoopHrTraceGlanceWidget().updateAll(app) }
     }
 
     fun save(context: Context, snap: WidgetSnapshot) {
-        val e = context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        val p = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val e = p.edit()
             .putInt("recovery", snap.recoveryPct ?: -1)
             .putInt("rest", snap.restPct ?: -1)
             .putInt("effort", snap.effortPct ?: -1)
@@ -77,6 +83,15 @@ object WidgetSnapshotStore {
         val live = (snap.heartRate ?: 0) > 0
         e.putBoolean("hrLive", live)
         if (live) e.putInt("hr", snap.heartRate!!).putLong("hrAt", snap.updatedAtMs)
+        // #1957: fold the live HR into the rolling trace series. Only a live sample extends the
+        // trace; a null-HR push (quiet patch / reconnect) leaves the series in place so the trace
+        // does not shrink on every lull. The series is stored as a delimited string so it crosses
+        // a process restart without a schema change.
+        if (live) {
+            val series = loadHrTrace(p)
+            val folded = HrTrace.fold(series, snap.updatedAtMs, snap.heartRate!!, snap.updatedAtMs)
+            e.putString(HR_TRACE_KEY, encodeHrTrace(folded))
+        }
         e.apply()
     }
 
@@ -98,6 +113,31 @@ object WidgetSnapshotStore {
             connected = p.getBoolean("connected", false),
             updatedAtMs = p.getLong("updatedAt", 0L),
         )
+    }
+
+    /** Load the persisted HR trace series for the trace widget (#1957). */
+    fun loadHrTrace(context: Context): List<Pair<Long, Int>> {
+        val p = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        return loadHrTrace(p)
+    }
+
+    private fun loadHrTrace(p: android.content.SharedPreferences): List<Pair<Long, Int>> =
+        decodeHrTrace(p.getString(HR_TRACE_KEY, null))
+
+    /** Encode the series as `ts:bpm,ts:bpm,…` — compact and SharedPreferences-safe. */
+    internal fun encodeHrTrace(series: List<Pair<Long, Int>>): String =
+        series.joinToString(",") { "${it.first}:${it.second}" }
+
+    /** Decode the `ts:bpm,ts:bpm,…` string back to a list. Null/empty → empty list. */
+    internal fun decodeHrTrace(s: String?): List<Pair<Long, Int>> {
+        if (s.isNullOrBlank()) return emptyList()
+        return s.split(',').mapNotNull { pair ->
+            val parts = pair.split(':')
+            if (parts.size != 2) return@mapNotNull null
+            val ts = parts[0].toLongOrNull() ?: return@mapNotNull null
+            val bpm = parts[1].toIntOrNull() ?: return@mapNotNull null
+            if (bpm > 0) ts to bpm else null
+        }
     }
 }
 
