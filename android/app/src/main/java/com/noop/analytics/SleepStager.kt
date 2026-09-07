@@ -3080,15 +3080,15 @@ object SleepStager {
     // ── Per-session HR / HRV ─────────────────────────────────────────────────
 
     /**
-     * #1943: what an artefact gate WOULD do to tonight's resting-HR floor, measured and reported without
-     * changing it.
+     * #1943: a conformance check that the artefact gate `sessionRestingHR` now applies agrees with the
+     * shipped floor. Silent on a clean night, and silent when the gate is correctly applied — the
+     * shipped floor IS the gated floor, so `wouldChange` is false.
      *
-     * [SleepStager.sessionRestingHR] takes the minimum of the 5-minute bin means unconditionally, so any
-     * non-empty bin can win, including one built from a single sample at the edge of a wear gap. The
-     * helper deleted alongside it had two conditions the shipped path never had: a bin may only WIN when
-     * it holds at least [minBinSamples] samples and its mean is at least [minPlausibleBpm]. Porting them
-     * is a small change; what nobody can currently say is how OFTEN it would move a displayed number, and
-     * that number feeds the baseline later nights are scored against. So measure first.
+     * [SleepStager.sessionRestingHR] now gates bins on [minBinSamples] and [minPlausibleBpm] before
+     * letting them win the floor, falling back to the lowest of all bin means when no bin qualifies.
+     * This helper reproduces the same partition and the same gate, so a mismatch surfaces as a spurious
+     * `wouldChange` — the only way it can fire now is if `shippedFloor` was NOT produced by
+     * `sessionRestingHR` (e.g. a stale cached value), or the gate logic drifted between the two.
      *
      * Bins are built exactly as `sessionRestingHR` builds them, closed final bin included, or the line
      * would describe a different partition than the one it is judging.
@@ -3148,7 +3148,7 @@ object SleepStager {
         if (!changes) return null
         return "rhr bins day=$day bins=$bins thin=$thin implausible=$implausible " +
             "winnerN=$bestN floor=$shippedFloor gated=${gatedFloor ?: "nil"} wouldChange=$changes " +
-            "(measure-only; nothing is gated yet)"
+            "(gate applied; a change means the shipped floor was not gated)"
     }
 
     /**
@@ -3163,7 +3163,16 @@ object SleepStager {
         val seg = hr.filter { it.ts in start..end }
         if (seg.isEmpty()) return null
         val windowS = 5 * 60L
-        val means = ArrayList<Double>()
+        // #1943: a bin qualifies to WIN the floor only when it is well-populated (≥ minBinSamples)
+        // and its mean is physiologically plausible (≥ minPlausibleBpm). A one-sample bin at the
+        // edge of a wear gap, or a dropout-driven sub-physiological dip, cannot become the night's
+        // resting HR — that number is displayed, stored on the daily row, and fed to the baseline
+        // later nights are scored against. If no bin qualifies, fall back to the lowest of ALL bin
+        // means (ungated), then the all-sample mean — preserving the never-null-on-data behaviour.
+        val minBinSamples = 5
+        val minPlausibleBpm = 25.0
+        val gatedMeans = ArrayList<Double>()
+        val allMeans = ArrayList<Double>()
         var t = start
         do {
             // The last bin (its half-open end reaches or passes `end`) closes on `end` instead,
@@ -3172,11 +3181,17 @@ object SleepStager {
             // window, where that single closed bin is the whole window.
             val isFinal = t + windowS >= end
             val win = seg.filter { it.ts >= t && (isFinal || it.ts < t + windowS) }
-            if (win.isNotEmpty()) means.add(win.sumOf { it.bpm }.toDouble() / win.size.toDouble())
+            if (win.isNotEmpty()) {
+                val mean = win.sumOf { it.bpm }.toDouble() / win.size.toDouble()
+                allMeans.add(mean)
+                if (win.size >= minBinSamples && mean >= minPlausibleBpm) gatedMeans.add(mean)
+            }
             t += windowS
         } while (t < end)
-        val m = means.minOrNull()
+        val m = gatedMeans.minOrNull()
         if (m != null) return m.roundToInt()
+        val am = allMeans.minOrNull()
+        if (am != null) return am.roundToInt()
         val all = seg.sumOf { it.bpm }.toDouble() / seg.size.toDouble()
         return all.roundToInt()
     }

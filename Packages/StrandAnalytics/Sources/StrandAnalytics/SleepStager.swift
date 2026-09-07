@@ -2778,15 +2778,15 @@ public enum SleepStager {
     /// the final one, which is `[t, end]`. Half-open bins alone would admit a sample sitting exactly
     /// on an aligned `end` through the prefilter and then place it in no bin — counted as data,
     /// silently ignored. A zero-length window (`start == end`) is that single closed bin.
-    /// #1943: what an artefact gate WOULD do to tonight's resting-HR floor, measured and reported without
-    /// changing it.
+    /// #1943: a conformance check that the artefact gate `sessionRestingHR` now applies agrees with the
+    /// shipped floor. Silent on a clean night, and silent when the gate is correctly applied — the
+    /// shipped floor IS the gated floor, so `wouldChange` is false.
     ///
-    /// `sessionRestingHR` takes the minimum of the 5-minute bin means unconditionally, so any non-empty
-    /// bin can win, including one built from a single sample at the edge of a wear gap. The helper deleted
-    /// alongside it had two conditions the shipped path never had: a bin may only WIN when it holds at
-    /// least `minBinSamples` samples and its mean is at least `minPlausibleBpm`. Porting them is a small
-    /// change; what nobody can currently say is how OFTEN it would move a displayed number, and that
-    /// number feeds the baseline later nights are scored against. So measure first.
+    /// `sessionRestingHR` now gates bins on `minBinSamples` and `minPlausibleBpm` before letting them
+    /// win the floor, falling back to the lowest of all bin means when no bin qualifies. This helper
+    /// reproduces the same partition and the same gate, so a mismatch surfaces as a spurious
+    /// `wouldChange` — the only way it can fire now is if `shippedFloor` was NOT produced by
+    /// `sessionRestingHR` (e.g. a stale cached value), or the gate logic drifted between the two.
     ///
     /// Bins are built exactly as `sessionRestingHR` builds them, closed final bin included, or the line
     /// would describe a different partition than the one it is judging.
@@ -2834,14 +2834,23 @@ public enum SleepStager {
         if !changes { return nil }
         return "rhr bins day=\(day) bins=\(bins) thin=\(thin) implausible=\(implausible) "
             + "winnerN=\(bestN) floor=\(shippedFloor) gated=\(gatedFloor.map(String.init) ?? "nil") "
-            + "wouldChange=\(changes) (measure-only; nothing is gated yet)"
+            + "wouldChange=\(changes) (gate applied; a change means the shipped floor was not gated)"
     }
 
     static func sessionRestingHR(start: Int, end: Int, hr: [HRSample]) -> Int? {
         let seg = hr.filter { $0.ts >= start && $0.ts <= end }
         guard !seg.isEmpty else { return nil }
         let windowS = 5 * 60
-        var means: [Double] = []
+        // #1943: a bin qualifies to WIN the floor only when it is well-populated (≥ minBinSamples)
+        // and its mean is physiologically plausible (≥ minPlausibleBpm). A one-sample bin at the
+        // edge of a wear gap, or a dropout-driven sub-physiological dip, cannot become the night's
+        // resting HR — that number is displayed, stored on the daily row, and fed to the baseline
+        // later nights are scored against. If no bin qualifies, fall back to the lowest of ALL bin
+        // means (ungated), then the all-sample mean — preserving the never-null-on-data behaviour.
+        let minBinSamples = 5
+        let minPlausibleBpm: Double = 25
+        var gatedMeans: [Double] = []
+        var allMeans: [Double] = []
         var t = start
         repeat {
             // The last bin (its half-open end reaches or passes `end`) closes on `end` instead,
@@ -2850,10 +2859,15 @@ public enum SleepStager {
             // zero-length window, where that single closed bin is the whole window.
             let isFinal = t + windowS >= end
             let win = seg.filter { $0.ts >= t && (isFinal || $0.ts < t + windowS) }
-            if !win.isEmpty { means.append(Double(win.reduce(0) { $0 + $1.bpm }) / Double(win.count)) }
+            if !win.isEmpty {
+                let mean = Double(win.reduce(0) { $0 + $1.bpm }) / Double(win.count)
+                allMeans.append(mean)
+                if win.count >= minBinSamples && mean >= minPlausibleBpm { gatedMeans.append(mean) }
+            }
             t += windowS
         } while t < end
-        if let m = means.min() { return Int(m.rounded()) }
+        if let m = gatedMeans.min() { return Int(m.rounded()) }
+        if let m = allMeans.min() { return Int(m.rounded()) }
         let all = Double(seg.reduce(0) { $0 + $1.bpm }) / Double(seg.count)
         return Int(all.rounded())
     }

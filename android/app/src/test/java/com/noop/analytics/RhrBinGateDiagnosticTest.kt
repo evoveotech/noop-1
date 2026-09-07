@@ -6,9 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * #1943 measure-only: the line must describe the partition `sessionRestingHR` actually uses, and must
- * stay silent on a night where an artefact gate would change nothing. A diagnostic that fired every
- * night would be ignored; one that fired on the wrong bins would argue for a change on false evidence.
+ * #1943 conformance check: the line must describe the partition `sessionRestingHR` actually uses, and
+ * fire when the shipped floor does NOT match the gated floor. Now that `sessionRestingHR` applies the
+ * gate, the only way it fires in production is a stale cached floor or a drift between the two. The
+ * tests below pass non-gated floors explicitly to exercise the diagnostic itself.
  */
 class RhrBinGateDiagnosticTest {
 

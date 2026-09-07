@@ -2,9 +2,11 @@ import XCTest
 import WhoopProtocol
 @testable import StrandAnalytics
 
-/// #1943 measure-only: the line must describe the partition `sessionRestingHR` actually uses, and must
-/// stay silent unless an artefact gate would MOVE the floor. Byte-parity twin of Kotlin
-/// `RhrBinGateDiagnosticTest`.
+/// #1943 conformance check: the line must describe the partition `sessionRestingHR` actually uses, and
+/// fire when the shipped floor does NOT match the gated floor. Now that `sessionRestingHR` applies the
+/// gate, the only way it fires in production is a stale cached floor or a drift between the two. The
+/// tests below pass non-gated floors explicitly to exercise the diagnostic itself. Byte-parity twin of
+/// Kotlin `RhrBinGateDiagnosticTest`.
 final class RhrBinGateDiagnosticTests: XCTestCase {
 
     private func hr(_ start: Int, _ count: Int, _ bpm: Int) -> [HRSample] {
