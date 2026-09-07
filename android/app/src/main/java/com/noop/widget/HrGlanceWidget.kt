@@ -119,7 +119,11 @@ private const val HR_CHART_TARGET_DP = 92f
 private fun hrChartWidthDp(widthDp: Float): Float =
     (widthDp - HR_CARD_PADDING_DP - HR_SCALE_COLUMN_DP).coerceAtLeast(24f)
 
-/** The trace tint. A heart reads red in this app's language, not the screenshot's blue. */
+/** The trace tint. A heart reads red in this app's language, not the screenshot's blue.
+ *
+ *  These are the HR ZONE-5 hexes: `StrandPalette.zone5` on the Apple side resolves to exactly this
+ *  pair, so the two widgets are one colour rather than two approximations. Kept as a local literal for
+ *  the same reason every other colour in this package is — Glance composes outside the app theme. */
 private fun hrAccent(dark: Boolean) = if (dark) Color(0xFFE0662F) else Color(0xFFC84E1E)
 
 @Composable
@@ -209,7 +213,7 @@ private fun HrWidgetContent(snap: WidgetSnapshot, dark: Boolean) {
         // few minutes — a void reads as broken where a shorter widget reads as new.
         if (snap.hrSeries.isNotEmpty()) {
             Spacer(GlanceModifier.height(8.dp))
-            HrTraceImage(snap, dark, widthDp = size.width.value,
+            HrTraceImage(snap, dark, widthDp = size.width.value, stats = stats,
                          modifier = GlanceModifier.defaultWeight())
             HrTimeAxis(snap, dark)
         }
@@ -245,12 +249,14 @@ private fun HrTraceImage(
     snap: WidgetSnapshot,
     dark: Boolean,
     widthDp: Float,
+    // Passed in rather than recomputed: the caller already scanned the series for it, and a second scan
+    // per render also meant two places deciding what the scale describes.
+    stats: HrTrace.Stats?,
     // Weighted by the CALLER: Glance scopes defaultWeight() to Row/ColumnScope, so a composable
     // cannot claim its own share of the parent from in here.
     modifier: GlanceModifier,
 ) {
     val context = LocalContext.current
-    val stats = HrTrace.stats(snap.hrSeries)
     val density = context.resources.displayMetrics.density
     // Leave room for the scale column so the trace is not drawn under its own labels.
     val chartWidthDp = hrChartWidthDp(widthDp)
