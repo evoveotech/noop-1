@@ -15,7 +15,7 @@ class SleepCarriedStampTest {
 
     private fun day(d: String, resp: Double? = null, eff: Double? = null): DailyMetric =
         DailyMetric(
-            day = d, totalSleepMin = 420.0, efficiency = eff,
+            deviceId = "test", day = d, totalSleepMin = 420.0, efficiency = eff,
             deepMin = 80.0, remMin = 90.0, lightMin = 200.0, disturbances = null,
             restingHr = null, avgHrv = null, recovery = null, strain = null,
             exerciseCount = null, spo2Pct = null, skinTempDevC = null, respRateBpm = resp,
@@ -53,8 +53,8 @@ class SleepCarriedStampTest {
         assertEquals("the carried value's source day is tracked", "2026-08-11", resp.latestDay)
         val caption = Metric.carriedMetricCaption(resp.latestDay, resp.latest)
         assertNotNull("a carried value must produce a stamp caption", caption)
-        assertTrue(caption!!.contains("Carried"), caption)
-        assertTrue(caption.contains("11"), caption)
+        assertTrue("caption must contain 'Carried': $caption", caption!!.contains("Carried"))
+        assertTrue("caption must contain '11': $caption", caption.contains("11"))
     }
 
     /// A nil latest has no stamp — the tile falls through to "vs typical" or "—".
