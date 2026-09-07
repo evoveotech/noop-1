@@ -2208,6 +2208,7 @@
     <string name="today_score_solid">FIABLE</string>
     <string name="today_charge_carried">Score de Charge · %1$s</string>
     <string name="today_recovery_carried">Récupération · %1$s</string>
+    <string name="sleep_carried_metric_caption">Reporté · %1$s</string>
     <string name="today_show_fewer_metrics">Afficher moins</string>
     <string name="today_show_all_metrics">Afficher toutes les mesures (%1$d)</string>
     <string name="today_hr_empty_selected_day">Aucune donnée de fréquence cardiaque pour ce jour. Revenez à un jour où vous portiez le bracelet.</string>

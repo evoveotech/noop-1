@@ -2132,6 +2132,7 @@
     <string name="today_score_solid">可靠</string>
     <string name="today_charge_carried">充能 · %1$s</string>
     <string name="today_recovery_carried">恢复 · %1$s</string>
+    <string name="sleep_carried_metric_caption">携带 · %1$s</string>
     <string name="today_show_fewer_metrics">收起</string>
     <string name="today_show_all_metrics">显示全部指标（%1$d）</string>
     <string name="today_hr_empty_selected_day">当天没有心率数据。请返回到佩戴手环的日期。</string>

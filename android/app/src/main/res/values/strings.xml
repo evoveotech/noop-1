@@ -2327,6 +2327,7 @@
     <string name="today_score_solid">SOLID</string>
     <string name="today_charge_carried">Charge · %1$s</string>
     <string name="today_recovery_carried">Recovery · %1$s</string>
+    <string name="sleep_carried_metric_caption">Carried · %1$s</string>
     <string name="today_show_fewer_metrics">Show fewer</string>
     <string name="today_show_all_metrics">Show all metrics (%1$d)</string>
     <string name="today_hr_empty_selected_day">No heart rate for this day. Step back to a day the strap was worn.</string>

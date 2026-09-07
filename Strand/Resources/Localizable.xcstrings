@@ -42823,6 +42823,9 @@
         }
       }
     },
+    "Carried · %@": { "localizations": {
+      "de": { "stringUnit": { "state": "translated", "value": "Übernommen · %@" } }, "es": { "stringUnit": { "state": "translated", "value": "Heredado · %@" } }, "fr": { "stringUnit": { "state": "translated", "value": "Reporté · %@" } }, "it": { "stringUnit": { "state": "translated", "value": "Riportato · %@" } }, "pl": { "stringUnit": { "state": "translated", "value": "Przeniesione · %@" } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Herdado · %@" } }, "ru": { "stringUnit": { "state": "translated", "value": "Перенесено · %@" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "携带 · %@" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "攜带 · %@" } }
+    } },
     "Carbs": {
       "localizations": {
         "de": {

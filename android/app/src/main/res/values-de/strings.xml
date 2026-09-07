@@ -2222,6 +2222,7 @@
     <string name="today_score_solid">STABIL</string>
     <string name="today_charge_carried">Charge-Wert · %1$s</string>
     <string name="today_recovery_carried">Erholung · %1$s</string>
+    <string name="sleep_carried_metric_caption">Übernommen · %1$s</string>
     <string name="today_show_fewer_metrics">Weniger anzeigen</string>
     <string name="today_show_all_metrics">Alle Messwerte anzeigen (%1$d)</string>
     <string name="today_hr_empty_selected_day">Keine Herzfrequenzdaten für diesen Tag. Gehe zu einem Tag zurück, an dem du den Strap getragen hast.</string>
