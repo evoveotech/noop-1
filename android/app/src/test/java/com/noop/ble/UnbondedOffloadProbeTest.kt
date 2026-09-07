@@ -611,42 +611,34 @@ class UnbondedOffloadProbeTest {
 
     // MARK: - #1804: local teardown is inconclusive, not a strap verdict
 
-    /** The field capture: status=22 (GATT_CONN_TERMINATE_LOCAL_HOST) with via=unknown. This is the
-     *  exact case that latched the probe permanently on the reporting install — a local teardown
-     *  counted as a strap refusal. */
+    /** The field capture: status=22 (GATT_CONN_TERMINATE_LOCAL_HOST). This is the exact case that
+     *  latched the probe permanently on the reporting install — a local teardown counted as a strap
+     *  refusal. The origin is NOT a parameter: it does not affect the verdict, and a parameter that
+     *  cannot change the answer invites the next reader to believe it can. */
     @Test
-    fun `a local teardown with unknown origin is inconclusive`() {
-        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = null))
-        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "unknown"))
-    }
-
-    /** A known local path (bondWatchdog, keepAliveStall, etc.) is equally not a strap verdict —
-     *  the link was ended by our own stack, not by the strap. */
-    @Test
-    fun `a local teardown with a known origin is also inconclusive`() {
-        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "bondWatchdog"))
-        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "keepAliveStall"))
-        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22, localTeardownOrigin = "userDisconnect"))
+    fun `a local teardown is inconclusive regardless of origin`() {
+        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22))
     }
 
     /** A supervision timeout (status=8, GATT_CONN_TIMEOUT) is the STRAP dropping the link — that IS
      *  evidence about the strap and should charge the silence budget. */
     @Test
     fun `a strap-side timeout is not a local teardown`() {
-        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 8, localTeardownOrigin = null))
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 8))
     }
 
     /** Any other status (e.g. 19, 133) is also not a local teardown. */
     @Test
     fun `other statuses are not local teardowns`() {
-        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 19, localTeardownOrigin = null))
-        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 133, localTeardownOrigin = null))
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 19))
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 133))
     }
 
-    /** The inconclusive line names the stage and the origin, and says it does not consume a budget
-     *  attempt — so a reader of the log knows the probe will retry rather than retire. */
+    /** The inconclusive line names the stage and the origin, and says it does not consume a SILENCE
+     *  budget attempt — so a reader of the log knows the silence budget is not spent. It DOES charge
+     *  the inconclusive budget, but that has its own larger cap (#1804). */
     @Test
-    fun `the inconclusive line names stage and origin and says it does not charge`() {
+    fun `the inconclusive line names stage and origin and says it does not charge silence`() {
         val line = unbondedProbeLinkLostLocalTeardownLine(
             uptimeMs = 10776, stage = 1, localTeardownOrigin = null,
         )
@@ -665,5 +657,51 @@ class UnbondedOffloadProbeTest {
         )
         assertTrue(line, line.contains("after GET_CLOCK went out"))
         assertTrue(line, line.contains("via=bondWatchdog"))
+    }
+
+    // MARK: - #1804: inconclusive budget bounds the retry
+
+    /** A local teardown is weaker evidence than silence, so it gets its own LARGER cap. The probe
+     *  retires when the inconclusive budget is spent, so a strap whose every link is torn down
+     *  locally does not retry forever. */
+    @Test
+    fun `inconclusive budget is larger than the silence budget`() {
+        assertTrue(UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS > UNBONDED_PROBE_MAX_SILENT_LINKS)
+    }
+
+    @Test
+    fun `probe retires when inconclusive budget is spent`() {
+        assertTrue(unbondedProbeRetired(
+            previouslyRefused = false,
+            silentLinksSoFar = 0,
+            inconclusiveLinksSoFar = UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS,
+        ))
+    }
+
+    @Test
+    fun `probe does not retire when inconclusive budget is not yet spent`() {
+        assertFalse(unbondedProbeRetired(
+            previouslyRefused = false,
+            silentLinksSoFar = 0,
+            inconclusiveLinksSoFar = UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS - 1,
+        ))
+    }
+
+    /** The skipped line names the inconclusive budget when that is what retired the probe. */
+    @Test
+    fun `skipped line names inconclusive budget when it is the reason`() {
+        val line = unbondedProbeSkippedLine(
+            isWhoop5 = true,
+            optedIn = true,
+            bonded = false,
+            helloWrittenThisLink = false,
+            alreadyProbedThisLink = false,
+            previouslyRefused = false,
+            silentLinksSoFar = 0,
+            inconclusiveLinksSoFar = UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS,
+        )
+        assertNotNull(line, line)
+        assertTrue(line!!, line.contains("inconclusive-link budget is spent"))
+        assertTrue(line, line.contains("our own stack"))
     }
 }

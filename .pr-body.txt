@@ -1,0 +1,22 @@
+## Summary
+
+- CoreBluetooth exposes no link-encryption or bond state, so Apple cannot verify that a CLIENT_HELLO write completion proves an encrypted bond. Android has `helloCompletionProvesEncryptedBond(osBonded) = osBonded` — only the OS bond state attests encryption. Apple has nothing to supply for that check, and the gap currently lives only in a source comment.
+- The issue's direction 2 is the most conservative and actionable: apply the timing tell. The sub-connection-interval heuristic is platform-neutral — a completion faster than one BLE connection interval (7.5ms) did not come from the strap. That alone would have caught #1635's false bond on Apple, where a DISABLE_ALARM completion in 5ms was misread as a hello ack.
+- This change adds:
+  - `ClientHelloOutcome.minPlausibleAttRoundTripMs` (8ms) — byte-identical to the Android twin `MIN_PLAUSIBLE_ATT_ROUND_TRIP_MS`.
+  - `ClientHelloOutcome.unverifiedBondTimingLine(elapsedMs:)` — a diagnostic line that fires when the hello completion is suspiciously fast. It says the bond is UNVERIFIED on this platform, references both #1883 and #1635, and explains why the handshake proceeds anyway (there is no alternative source of truth on Apple).
+  - The BLEManager now computes the elapsed time before clearing the hello window and logs the timing line when the hello is acked but the elapsed time is under the threshold.
+- This is **diagnostic-only**. The bond still proceeds, the handshake still runs, and `encryptedBond` is still set — because on Apple there is no alternative source of truth, and refusing to bond would break every strap that genuinely bonds. The line only says what is UNKNOWN: that the completion was suspiciously fast and the link's encryption state cannot be verified on this platform.
+- No Kotlin twin — this is Apple-only by design. Android has `helloAckedWithoutEncryptionLine` for the case where the OS bond state IS available and disagrees, which is a stronger signal than the timing tell.
+
+### Files
+- `Strand/BLE/ClientHelloOutcome.swift` — added `minPlausibleAttRoundTripMs` constant + `unverifiedBondTimingLine(elapsedMs:)` diagnostic.
+- `Strand/BLE/BLEManager.swift` — computes hello elapsed time before clearing the window; logs the timing line when the hello is acked but suspiciously fast.
+- `StrandTests/ClientHelloOutcomeTests.swift` — 5 new tests covering the timing tell (suspiciously fast, plausible, threshold match, 0ms, no em-dash).
+
+### Test plan
+- [ ] `xcodebuild -project Strand.xcodeproj -scheme Strand -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build` — app-target Swift compiles
+- [ ] `xcodebuild ... test` — StrandTests including the 5 new ClientHelloOutcome tests
+- [ ] Hardware: a 5/MG with a suspiciously fast hello completion should now see the UNVERIFIED timing line in the strap log
+
+Generated with [Devin](https://devin.ai)

@@ -2679,6 +2679,29 @@ class WhoopBleClient(
         runCatching { PuffinExperiment.from(context).setUnbondedProbeSilentLinks(lastDeviceAddress, value) }
     }
 
+    /** #1804: consecutive local-teardown (status=22) probe links, persisted per device. A local
+     *  teardown is inconclusive about the strap, so it charges THIS budget (with its own larger cap)
+     *  rather than the silence budget. Bounded so a strap whose every link is torn down locally does
+     *  not retry forever. */
+    private val unbondedProbeInconclusiveLinks: Int
+        get() = runCatching {
+            PuffinExperiment.from(context).unbondedProbeInconclusiveLinks(lastDeviceAddress)
+        }.getOrDefault(0)
+
+    private fun setUnbondedProbeInconclusiveLinks(value: Int) {
+        runCatching { PuffinExperiment.from(context).setUnbondedProbeInconclusiveLinks(lastDeviceAddress, value) }
+    }
+
+    /** #1804: charge the inconclusive budget for a local teardown. A genuine answer clears it
+     *  (alongside the silence budget), because whatever the quiet links were, they were not this
+     *  strap declining to talk. */
+    private fun chargeUnbondedProbeInconclusive() {
+        val spent = unbondedProbeInconclusiveLinks + 1
+        setUnbondedProbeInconclusiveLinks(spent)
+        log("Unbonded offload probe: inconclusive link budget now $spent/$UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS" +
+            " (local teardowns are not strap verdicts, but the probe must still terminate (#1804)).")
+    }
+
     /** True when the user asked to disconnect; suppresses the auto-rescan (Swift `intentionalDisconnect`).
      *  Written on the main looper (connect/disconnect/keep-alive bounce) and read on the GATT binder
      *  thread (handleDisconnect), so it must be @Volatile for cross-thread visibility. */
@@ -5316,6 +5339,7 @@ class WhoopBleClient(
         val helloWrittenNow = helloWrittenThisLink
         val alreadyProbedNow = unbondedProbeStartedThisLink
         val silentLinksNow = unbondedProbeSilentLinks
+        val inconclusiveLinksNow = unbondedProbeInconclusiveLinks
         if (!shouldProbeUnbondedOffload(
                 isWhoop5 = isWhoop5Now,
                 optedIn = optedInNow,
@@ -5324,6 +5348,7 @@ class WhoopBleClient(
                 alreadyProbedThisLink = alreadyProbedNow,
                 previouslyRefused = refused,
                 silentLinksSoFar = silentLinksNow,
+                inconclusiveLinksSoFar = inconclusiveLinksNow,
             )
         ) {
             // #1949: say WHY, once per link. UNGATED, unlike the pairing dump, and deliberately so: the
@@ -5348,6 +5373,7 @@ class WhoopBleClient(
                     alreadyProbedThisLink = alreadyProbedNow,
                     previouslyRefused = refused,
                     silentLinksSoFar = silentLinksNow,
+                    inconclusiveLinksSoFar = inconclusiveLinksNow,
                 )?.let { log(it, com.noop.testcentre.TestDomain.CONNECTION) }
             }
             return
@@ -5488,6 +5514,9 @@ class WhoopBleClient(
         // strap declining to talk, and a later reconnect — or a later app launch — must not inherit
         // their count.
         setUnbondedProbeSilentLinks(0)
+        // #1804: a genuine answer also clears the inconclusive budget — the local teardowns were not
+        // this strap refusing either, and the probe has now reached a conclusion.
+        setUnbondedProbeInconclusiveLinks(0)
         // The proven 5/MG handshake tail, minus the hello that cannot happen: clock the strap, then offload.
         // Clock-before-history is mandatory — an un-clocked 5/MG discards sensor data rather than banking it
         // — and it is only reached here because the strap has just demonstrated it answers commands.
@@ -10890,14 +10919,17 @@ class WhoopBleClient(
         handler.removeCallbacks(unbondedProbeVerdictRunnable)
         if (unbondedProbeSubscribing || unbondedProbeAwaitingReply) {
             val uptime = if (connectedAtMs > 0L) System.currentTimeMillis() - connectedAtMs else -1L
-            if (unbondedProbeLinkLostIsLocalTeardown(status, lastLocalTeardown)) {
+            if (unbondedProbeLinkLostIsLocalTeardown(status)) {
                 val stage = if (unbondedProbeSubscribing) 1 else 2
                 log(unbondedProbeLinkLostLocalTeardownLine(
                     uptimeMs = uptime,
                     stage = stage,
                     localTeardownOrigin = lastLocalTeardown,
                 ))
-                // Do NOT charge the silence budget — a local teardown is not a strap verdict (#1804).
+                // #1804: a local teardown is not a strap verdict, so it does NOT charge the silence
+                // budget. But it DOES charge the inconclusive budget, so a strap whose every link is
+                // torn down locally does not retry forever.
+                chargeUnbondedProbeInconclusive()
             } else {
                 log(
                     if (unbondedProbeSubscribing) unbondedProbeLinkLostLine(

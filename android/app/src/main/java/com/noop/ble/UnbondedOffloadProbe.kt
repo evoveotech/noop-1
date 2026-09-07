@@ -51,6 +51,7 @@ internal fun shouldProbeUnbondedOffload(
     alreadyProbedThisLink: Boolean,
     previouslyRefused: Boolean,
     silentLinksSoFar: Int,
+    inconclusiveLinksSoFar: Int = 0,
 ): Boolean {
     if (!isWhoop5) return false
     if (!optedIn) return false
@@ -62,7 +63,7 @@ internal fun shouldProbeUnbondedOffload(
     // eleven weeks. Only the stable no-hello link can answer this question.
     if (helloWrittenThisLink) return false
     if (alreadyProbedThisLink) return false
-    return !unbondedProbeRetired(previouslyRefused, silentLinksSoFar)
+    return !unbondedProbeRetired(previouslyRefused, silentLinksSoFar, inconclusiveLinksSoFar)
 }
 
 /**
@@ -89,6 +90,7 @@ internal fun unbondedProbeSkippedLine(
     alreadyProbedThisLink: Boolean,
     previouslyRefused: Boolean,
     silentLinksSoFar: Int,
+    inconclusiveLinksSoFar: Int = 0,
 ): String? {
     val why = when {
         !isWhoop5 -> "not a WHOOP 5/MG"
@@ -97,9 +99,14 @@ internal fun unbondedProbeSkippedLine(
         helloWrittenThisLink ->
             "a CLIENT_HELLO went out on this link, so a refusal here could not be attributed to the strap"
         alreadyProbedThisLink -> "already probed on this link"
-        unbondedProbeRetired(previouslyRefused, silentLinksSoFar) ->
-            if (previouslyRefused) "retired for this strap: a refusal is latched"
-            else "retired for this strap: the silent-link budget is spent"
+        unbondedProbeRetired(previouslyRefused, silentLinksSoFar, inconclusiveLinksSoFar) ->
+            when {
+                previouslyRefused -> "retired for this strap: a refusal is latched"
+                !unbondedProbeStillWorthAsking(silentLinksSoFar) ->
+                    "retired for this strap: the silent-link budget is spent"
+                else -> "retired for this strap: the inconclusive-link budget is spent (our own stack" +
+                    " tore down every probe link, so the question was never asked of the strap)"
+            }
         else -> return null
     }
     val consequence = if (isWhoop5 && !bonded) {
@@ -130,8 +137,14 @@ internal fun unbondedProbeSkippedLine(
  * all, `didBond=false` and `Backfill: deferred` nine times across sixteen hours. The strap could neither
  * bond nor sync, in service of a question that had already stopped being asked.
  */
-internal fun unbondedProbeRetired(previouslyRefused: Boolean, silentLinksSoFar: Int): Boolean =
-    previouslyRefused || !unbondedProbeStillWorthAsking(silentLinksSoFar)
+internal fun unbondedProbeRetired(
+    previouslyRefused: Boolean,
+    silentLinksSoFar: Int,
+    inconclusiveLinksSoFar: Int = 0,
+): Boolean =
+    previouslyRefused
+        || !unbondedProbeStillWorthAsking(silentLinksSoFar)
+        || !unbondedProbeStillWorthAskingInconclusive(inconclusiveLinksSoFar)
 
 /**
  * How many links may end in SILENCE before the probe retires itself.
@@ -153,12 +166,40 @@ internal fun unbondedProbeRetired(previouslyRefused: Boolean, silentLinksSoFar: 
  */
 internal const val UNBONDED_PROBE_MAX_SILENT_LINKS = 3
 
+/**
+ * How many CONSECUTIVE LOCAL TEARDOWNS may end a probe before it retires itself.
+ *
+ * #1804: a local teardown (status=22) is inconclusive about the strap — our own stack ended the
+ * link, not the strap — so it does NOT charge the silence budget. But inconclusive cannot mean
+ * unbounded: the probe re-runs on every reconnect, and on the strap this fix was written for
+ * EVERY attempt was a local teardown. Without a cap the probe re-runs indefinitely on precisely
+ * the device the fix was written for, with no path to a conclusion.
+ *
+ * The cap is LARGER than the silence budget because inconclusive is genuinely weaker evidence
+ * than silence: a silent link at least proved the subscriptions were accepted, while a local
+ * teardown proved nothing about the strap at all. If our stack tears the link down every time,
+ * the probe cannot complete regardless of what the strap would have said, and that is worth
+ * recording and stopping on too.
+ *
+ * Like the silence budget, cleared by a genuine answer and by turning the experiment off and on.
+ */
+internal const val UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS = 6
+
 /** Has the probe any budget left after [silentLinksSoFar] links that ended without an answer — whether
  *  they subscribed and stayed quiet, or were torn down while being asked? */
 internal fun unbondedProbeStillWorthAsking(
     silentLinksSoFar: Int,
     cap: Int = UNBONDED_PROBE_MAX_SILENT_LINKS,
 ): Boolean = silentLinksSoFar < cap
+
+/** Has the probe any inconclusive budget left after [inconclusiveLinksSoFar] links ended in a
+ *  LOCAL teardown (status=22)? #1804: a local teardown is weaker than silence, so it gets its own
+ *  larger cap — but it is still bounded, so a strap whose every link is torn down locally does not
+ *  retry forever. */
+internal fun unbondedProbeStillWorthAskingInconclusive(
+    inconclusiveLinksSoFar: Int,
+    cap: Int = UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS,
+): Boolean = inconclusiveLinksSoFar < cap
 
 /**
  * The line printed when the probe retires, so the log says why it stopped rather than leaving a reader to
@@ -269,6 +310,17 @@ internal const val UNBONDED_PROBE_SILENT_LINKS_KEY_PREFIX = "noop.unbondedOffloa
 internal fun unbondedProbeSilentLinksPrefKey(peripheralId: String?): String? =
     peripheralId?.trim()?.takeIf { it.isNotEmpty() }
         ?.let { UNBONDED_PROBE_SILENT_LINKS_KEY_PREFIX + it.lowercase() }
+
+/** Prefix of every persisted inconclusive budget, cleared alongside the silence budget when the
+ *  experiment is re-armed. #1804: a local teardown charges this instead of the silence budget, and
+ *  it has its own larger cap ([UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS]). */
+internal const val UNBONDED_PROBE_INCONCLUSIVE_LINKS_KEY_PREFIX = "noop.unbondedOffloadInconclusiveLinks."
+
+/** Persisted key for "how many probe links on this strap ended in a LOCAL teardown (status=22)" —
+ *  the inconclusive budget of [UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS], per device. */
+internal fun unbondedProbeInconclusiveLinksPrefKey(peripheralId: String?): String? =
+    peripheralId?.trim()?.takeIf { it.isNotEmpty() }
+        ?.let { UNBONDED_PROBE_INCONCLUSIVE_LINKS_KEY_PREFIX + it.lowercase() }
 
 /**
  * What a frame arriving on a puffin notify characteristic proves about an unbonded link.
@@ -415,11 +467,14 @@ internal fun unbondedProbeLinkLostAskingLine(uptimeMs: Long, waitedMs: Long): St
  */
 internal fun unbondedProbeLinkLostIsLocalTeardown(
     status: Int,
-    localTeardownOrigin: String?,
 ): Boolean {
     // GATT_CONN_TERMINATE_LOCAL_HOST = 0x16 = 22. Any local teardown, whether we know which path
     // did it or not, is inconclusive about the strap. `via=unknown` is the case the field capture
     // surfaced; `via=bondWatchdog` etc. are known local paths and equally not strap verdicts.
+    //
+    // The origin is NOT a parameter here: it does not affect the verdict, and a parameter that
+    // cannot change the answer invites the next reader to believe it can. The origin IS carried by
+    // `unbondedProbeLinkLostLocalTeardownLine`, which is where it is actually used.
     return status == 22
 }
 
@@ -429,9 +484,14 @@ internal fun unbondedProbeLinkLostIsLocalTeardown(
  * Distinct from [unbondedProbeLinkLostLine] (stage 1, strap-side drop — carries the CLIENT_HELLO
  * signature) and [unbondedProbeLinkLostAskingLine] (stage 2, strap-side drop — carries no finding).
  * This one carries no finding EITHER way and does NOT charge the silence budget, because the link
- * was ended by our own stack, not by the strap. Charging it would spend the budget on a question
- * that was never asked of the strap, which is exactly the false negative that latched the probe
- * permanently on the reporting install.
+ * was ended by our own stack, not by the strap. Charging the SILENCE budget would spend it on a
+ * question that was never asked of the strap, which is exactly the false negative that latched the
+ * probe permanently on the reporting install.
+ *
+ * It DOES charge the INCONCLUSIVE budget ([UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS]), which has its
+ * own larger cap. A local teardown is weaker evidence than silence, but it cannot be unbounded: on
+ * the strap this fix was written for, EVERY attempt was a local teardown, and without a cap the
+ * probe would re-run indefinitely with no path to a conclusion.
  */
 internal fun unbondedProbeLinkLostLocalTeardownLine(
     uptimeMs: Long,
