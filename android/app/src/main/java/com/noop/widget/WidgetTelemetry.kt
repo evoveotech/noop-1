@@ -32,7 +32,24 @@ import java.util.Locale
  */
 object WidgetTelemetry {
 
+    /**
+     * How long after the first push to ignore before the rates start counting.
+     *
+     * The snapshot's fields populate one after another at startup — recovery, then rest, then effort,
+     * then battery, then connection — and each one is a key change [PushGate] admits immediately. So a
+     * launch produces a burst that the 60-second refresh clause has nothing to do with. The first field
+     * sample showed six pushes in a hundred seconds reported as 215/h, against a steady state of about
+     * sixty: the number that matters most was wrong by three and a half times, in exactly the situation
+     * where someone looks at it first.
+     */
+    private const val WARMUP_MS = 60_000L
+
     private var startedAtMs = 0L
+    private var steadyStartMs = 0L
+    private var steadyPushes = 0L
+    private var steadyUnchanged = 0L
+    private var steadyNoWidget = 0L
+    private var steadyRenderBytes = 0L
     private var pushesAdmitted = 0L
     private var pushesGated = 0L
     private var renders = 0L
@@ -41,6 +58,7 @@ object WidgetTelemetry {
     private var renderMs = 0L
     private var renderMsMax = 0L
     private var pushesUnchanged = 0L
+    private var pushesNoWidget = 0L
     private var lastPushAtMs = 0L
 
     /** A push [PushGate] let through: prefs written and every placed widget recomposed. */
@@ -49,6 +67,10 @@ object WidgetTelemetry {
         if (startedAtMs == 0L) startedAtMs = nowMs
         pushesAdmitted += 1
         lastPushAtMs = nowMs
+        if (nowMs - startedAtMs >= WARMUP_MS) {
+            if (steadyStartMs == 0L) steadyStartMs = nowMs
+            steadyPushes += 1
+        }
     }
 
     /** A push the gate dropped. At live-HR cadence this should dwarf the admitted count. */
@@ -66,6 +88,22 @@ object WidgetTelemetry {
     @Synchronized
     fun notePushUnchanged() {
         pushesUnchanged += 1
+        if (steadyStartMs != 0L) steadyUnchanged += 1
+    }
+
+    /**
+     * A push admitted with no widget placed to receive it.
+     *
+     * A DIFFERENT outcome from [notePushUnchanged], and worth its own counter rather than folding the
+     * two together: "there was nothing new to show" and "there was nobody to show it to" answer
+     * different questions, and the second is exactly what an export taken with the widget removed is
+     * for. Counting it as a send would have made a widget-removed capture look identical to a
+     * widget-placed one on every figure except the draws.
+     */
+    @Synchronized
+    fun notePushNoWidget() {
+        pushesNoWidget += 1
+        if (steadyStartMs != 0L) steadyNoWidget += 1
     }
 
     /** One trace bitmap built: [bytes] is what crosses the Binder, [elapsedMs] is the draw alone. */
@@ -75,6 +113,7 @@ object WidgetTelemetry {
         renderBytes += bytes.toLong()
         renderMs += elapsedMs
         if (elapsedMs > renderMsMax) renderMsMax = elapsedMs
+        if (steadyStartMs != 0L) steadyRenderBytes += bytes.toLong()
     }
 
     /**
@@ -90,9 +129,15 @@ object WidgetTelemetry {
     @Synchronized
     fun snapshot(nowMs: Long): Snapshot = Snapshot(
         uptimeMs = if (startedAtMs == 0L) 0L else nowMs - startedAtMs,
+        steadyMs = if (steadyStartMs == 0L) 0L else nowMs - steadyStartMs,
+        steadyPushes = steadyPushes,
+        steadyUnchanged = steadyUnchanged,
+        steadyNoWidget = steadyNoWidget,
+        steadyRenderBytes = steadyRenderBytes,
         pushesAdmitted = pushesAdmitted,
         pushesGated = pushesGated,
         pushesUnchanged = pushesUnchanged,
+        pushesNoWidget = pushesNoWidget,
         renders = renders,
         rendersRedundant = rendersRedundant,
         renderBytes = renderBytes,
@@ -103,16 +148,25 @@ object WidgetTelemetry {
 
     @Synchronized
     fun resetForTest() {
-        startedAtMs = 0L; pushesAdmitted = 0L; pushesGated = 0L; pushesUnchanged = 0L
+        startedAtMs = 0L; steadyStartMs = 0L; steadyPushes = 0L; steadyRenderBytes = 0L
+        steadyUnchanged = 0L
+        pushesAdmitted = 0L; pushesGated = 0L; pushesUnchanged = 0L; pushesNoWidget = 0L
+        steadyNoWidget = 0L
         renders = 0L; rendersRedundant = 0L; renderBytes = 0L; renderMs = 0L; renderMsMax = 0L
         lastPushAtMs = 0L
     }
 
     data class Snapshot(
         val uptimeMs: Long,
+        val steadyMs: Long,
+        val steadyPushes: Long,
+        val steadyUnchanged: Long,
+        val steadyNoWidget: Long,
+        val steadyRenderBytes: Long,
         val pushesAdmitted: Long,
         val pushesGated: Long,
         val pushesUnchanged: Long,
+        val pushesNoWidget: Long,
         val renders: Long,
         val rendersRedundant: Long,
         val renderBytes: Long,
@@ -120,22 +174,54 @@ object WidgetTelemetry {
         val renderMsMax: Long,
         val lastPushAgoMs: Long?,
     ) {
-        /** Mean bitmap in bytes, or null before the first render. */
+        /**
+         * Mean bitmap in bytes, or null before the first render.
+         *
+         * Deliberately over EVERY draw, unlike the rates: this is a property of one bitmap, set by the
+         * widget's size and the screen's density, not something a startup burst distorts. Worth
+         * knowing when reading the line, since `mean` and `MB/h` beside each other do not span the
+         * same window and so will not divide into each other exactly. The same is true of the draw
+         * times below it.
+         */
         val meanRenderBytes: Long? get() = if (renders > 0) renderBytes / renders else null
 
-        /**
-         * Pushes per hour, extrapolated from this process's uptime. Null under a minute of uptime:
-         * a rate from a few seconds of samples is noise wearing a number's clothes.
-         */
-        val pushesPerHour: Double?
-            get() = if (uptimeMs >= 60_000L) pushesAdmitted * 3_600_000.0 / uptimeMs else null
+        /** A rate is only quoted once the steady window is long enough to mean something. Five
+         *  minutes of ordinary running is a handful of one-a-minute pushes; less is arithmetic. */
+        private val steadyEnough: Boolean get() = steadyMs >= 5 * 60_000L
 
         /**
-         * Bitmap bytes per hour at the observed rate — the figure the drain question turns on, since
-         * this is what crosses a Binder transaction to the launcher.
+         * Pushes that actually became a widget update: admitted, then neither dropped by
+         * [RenderedGate] nor discarded for having no widget to go to.
+         */
+        val pushesSent: Long get() = pushesAdmitted - pushesUnchanged - pushesNoWidget
+
+        /**
+         * Widget updates SENT per hour, over the steady window rather than since process start.
+         *
+         * Two exclusions, for two different reasons. The startup burst goes because it is not what the
+         * widget costs to keep running — the snapshot's fields arrive one by one and each is a key
+         * change admitted on the spot, so a launch produces pushes the 60-second clause had nothing to
+         * do with, and quoting them overstated the cost by three and a half times on the first sample
+         * from a device.
+         *
+         * And pushes [RenderedGate] declined go because they never reached a widget. Counting them
+         * here would have made this rate blind to the one optimisation it exists to price: the gate's
+         * whole purpose is to lower this number, so a figure that could not fall when the gate fired
+         * would be measuring the wrong thing.
+         *
+         * Elapsed WALL-CLOCK time is the denominator, not time spent streaming, because that is what a
+         * battery question is asked in. A process that idles for an hour genuinely cost nothing over
+         * that hour, and the rate should say so.
+         */
+        val pushesPerHour: Double?
+            get() = if (steadyEnough) (steadyPushes - steadyUnchanged - steadyNoWidget) * 3_600_000.0 / steadyMs else null
+
+        /**
+         * Bitmap bytes per hour — the figure the drain question turns on, since this is what crosses a
+         * Binder transaction to the launcher. Same steady window, for the same reason.
          */
         val renderBytesPerHour: Double?
-            get() = if (uptimeMs >= 60_000L) renderBytes * 3_600_000.0 / uptimeMs else null
+            get() = if (steadyEnough) steadyRenderBytes * 3_600_000.0 / steadyMs else null
 
         /**
          * One line for the diagnostics header. Deliberately reports the RATE alongside the raw counts:
@@ -150,9 +236,24 @@ object WidgetTelemetry {
                 return "Widgets:     no pushes this app session"
             }
             val mins = uptimeMs / 60_000
+            // Say when a rate is being withheld, and say it in terms of the window it is actually
+            // waiting on. "needs 6m+" would read as a claim about UPTIME, and with sparse pushes the
+            // steady window opens late — twenty minutes in and still withholding would look broken
+            // rather than explained.
+            val span = if (steadyEnough) {
+                "over ${mins}m"
+            } else {
+                "over ${mins}m, steady ${steadyMs / 60_000}m of 5m"
+            }
             val parts = ArrayList<String>(6)
             if (pushesAdmitted > 0L || pushesGated > 0L) {
-                parts.add("$pushesAdmitted pushed / ${pushesAdmitted + pushesGated} offered")
+                // SENT first, because it is the one that means "a widget was updated". `pushesAdmitted`
+                // alone read as that and was not: a push the rendered gate declined is admitted and
+                // never sent.
+                parts.add(
+                    "$pushesSent sent / $pushesAdmitted admitted / " +
+                        "${pushesAdmitted + pushesGated} offered",
+                )
             } else {
                 parts.add("no pushes")
             }
@@ -164,8 +265,9 @@ object WidgetTelemetry {
                 parts.add("draw ${renderMs / renders}ms avg / ${renderMsMax}ms max")
             }
             if (pushesUnchanged > 0) parts.add("$pushesUnchanged unchanged")
+            if (pushesNoWidget > 0) parts.add("$pushesNoWidget with no widget placed")
             if (rendersRedundant > 0) parts.add("$rendersRedundant redundant")
-            return "Widgets:     ${parts.joinToString(" · ")} (over ${mins}m)"
+            return "Widgets:     ${parts.joinToString(" · ")} ($span)"
         }
     }
 }

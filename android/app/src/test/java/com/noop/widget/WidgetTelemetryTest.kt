@@ -35,19 +35,45 @@ class WidgetTelemetryTest {
         val s = WidgetTelemetry.snapshot(t0 + 60_000L)
         assertEquals(1, s.pushesAdmitted)
         assertEquals(59, s.pushesGated)
-        assertTrue("1 pushed / 60 offered" in s.render())
+        assertTrue(s.render(), "1 sent / 1 admitted / 60 offered" in s.render())
     }
 
-    /** A rate over one minute of uptime is the figure a drain question turns on. */
+    /** The rate is measured over the steady window, one push a minute being the ordinary cadence. */
     @Test
-    fun ratesAreExtrapolatedFromUptime() {
-        repeat(10) { WidgetTelemetry.notePushAdmitted(t0 + it * 60_000L) }
-        repeat(10) { WidgetTelemetry.noteRender(bytes = 512 * 1024, elapsedMs = 4) }
-        val s = WidgetTelemetry.snapshot(t0 + 600_000L)   // 10 minutes
-        assertEquals(60.0, s.pushesPerHour!!, 0.001)      // 10 pushes in 10m = 60/h
+    fun ratesAreExtrapolatedFromTheSteadyWindow() {
+        // One push at t0 opens the warm-up; the rest land a minute apart beyond it.
+        WidgetTelemetry.notePushAdmitted(t0)
+        for (m in 1..10) {
+            WidgetTelemetry.notePushAdmitted(t0 + m * 60_000L)
+            WidgetTelemetry.noteRender(bytes = 512 * 1024, elapsedMs = 4)
+        }
+        val s = WidgetTelemetry.snapshot(t0 + 660_000L)
+        // Steady window opens at the first post-warm-up push (t0+60s) and runs 10 minutes; ten pushes
+        // and ten draws inside it.
+        assertEquals(60.0, s.pushesPerHour!!, 0.001)
         assertEquals(512L, s.meanRenderBytes!! / 1024)
-        // 10 x 512KB in 10 minutes = 30MB/h.
         assertEquals(30.0, s.renderBytesPerHour!! / 1_048_576.0, 0.01)
+    }
+
+    /**
+     * The startup burst must not be quoted as a rate. The snapshot's fields arrive one by one at
+     * launch and each is a key change PushGate admits on the spot, so a launch produces pushes the
+     * 60-second clause had nothing to do with. A device reported six pushes in a hundred seconds as
+     * 215/h against a steady state of about sixty — the headline number wrong by three and a half
+     * times, in the situation where it is looked at first.
+     */
+    @Test
+    fun aStartupBurstIsNotQuotedAsARate() {
+        // Six pushes inside the first hundred seconds, as the real capture showed.
+        for (ms in listOf(0L, 2_000L, 5_000L, 9_000L, 30_000L, 95_000L)) {
+            WidgetTelemetry.notePushAdmitted(t0 + ms)
+        }
+        val s = WidgetTelemetry.snapshot(t0 + 100_000L)
+        assertEquals(6, s.pushesAdmitted)
+        assertNull("a burst is not a rate", s.pushesPerHour)
+        val line = s.render()
+        assertTrue(line, "6 sent / 6 admitted" in line)
+        assertTrue("the line must say the rate is withheld: $line", "steady" in line)
     }
 
     /**
@@ -55,7 +81,7 @@ class WidgetTelemetryTest {
      * goes in front of someone deciding whether to change the refresh cadence.
      */
     @Test
-    fun noRateIsClaimedUnderAMinuteOfUptime() {
+    fun noRateIsClaimedUnderASteadyWindow() {
         WidgetTelemetry.notePushAdmitted(t0)
         val s = WidgetTelemetry.snapshot(t0 + 5_000L)
         assertNull(s.pushesPerHour)
@@ -169,9 +195,12 @@ class WidgetTelemetryTest {
         val original = Locale.getDefault()
         try {
             Locale.setDefault(Locale.GERMANY)
-            repeat(10) { WidgetTelemetry.notePushAdmitted(t0 + it * 60_000L) }
-            repeat(10) { WidgetTelemetry.noteRender(bytes = 512 * 1024, elapsedMs = 4) }
-            val line = WidgetTelemetry.snapshot(t0 + 600_000L).render()
+            WidgetTelemetry.notePushAdmitted(t0)
+            for (m in 1..10) {
+                WidgetTelemetry.notePushAdmitted(t0 + m * 60_000L)
+                WidgetTelemetry.noteRender(bytes = 512 * 1024, elapsedMs = 4)
+            }
+            val line = WidgetTelemetry.snapshot(t0 + 660_000L).render()
             assertTrue(line, "60.0/h" in line)
             assertTrue(line, "30.0MB/h" in line)
             assertFalse(line, "," in line.substringAfter("Widgets:"))
@@ -212,5 +241,85 @@ class WidgetTelemetryTest {
         assertTrue("480dpi/380dp should be upscaled", effective(480f, 380f) < 1.0)
         // And a small card is where the intent survives best, though still short of the nominal 2x.
         assertTrue("420dpi/300dp should have the most headroom", effective(420f, 300f) > 1.5)
+    }
+
+    /**
+     * The withheld-rate message has to name the window it is actually waiting on. Phrasing it as a
+     * minimum UPTIME was wrong: pushes can be sparse enough that the steady window opens late, so the
+     * line would sit twenty minutes in still claiming it needed six, which reads as broken rather than
+     * explained.
+     */
+    @Test
+    fun aWithheldRateNamesTheSteadyWindowNotTheUptime() {
+        WidgetTelemetry.notePushAdmitted(t0)                    // opens warm-up
+        WidgetTelemetry.notePushAdmitted(t0 + 19 * 60_000L)     // opens steady, nineteen minutes in
+        val line = WidgetTelemetry.snapshot(t0 + 20 * 60_000L).render()
+        assertNull(WidgetTelemetry.snapshot(t0 + 20 * 60_000L).pushesPerHour)
+        assertTrue("uptime should read twenty minutes: $line", "over 20m" in line)
+        assertTrue("and the wait should be stated against the steady window: $line",
+            "steady 1m of 5m" in line)
+    }
+
+    /**
+     * The rate has to be blind to nothing except what never reached a widget. A push RenderedGate
+     * declines is admitted and then dropped, so counting it here would have made this figure unable
+     * to fall when the gate fired — and lowering it is the gate's entire purpose. An instrument that
+     * cannot show the effect of the optimisation shipped beside it is measuring the wrong thing.
+     */
+    @Test
+    fun declinedPushesAreNotCountedAsSentOrRated() {
+        WidgetTelemetry.notePushAdmitted(t0)                       // warm-up
+        for (m in 1..10) {
+            WidgetTelemetry.notePushAdmitted(t0 + m * 60_000L)
+            if (m > 5) WidgetTelemetry.notePushUnchanged()          // five of the ten never went out
+        }
+        val s = WidgetTelemetry.snapshot(t0 + 660_000L)
+        assertEquals(11, s.pushesAdmitted)
+        assertEquals(6, s.pushesSent)                              // 11 admitted - 5 declined
+        // Steady window holds ten pushes over ten minutes, five of them declined: five sends an hour
+        // at that cadence would be 30/h, not the 60/h the admitted count alone would have claimed.
+        assertEquals(30.0, s.pushesPerHour!!, 0.001)
+        val line = s.render()
+        assertTrue(line, "6 sent / 11 admitted" in line)
+        assertTrue(line, "5 unchanged" in line)
+    }
+
+    /**
+     * The widget-removed capture is half of the comparison that answers whether the widget costs
+     * anything, so a push with nowhere to go must not read as a send. Left as one, both halves of the
+     * A/B would have shown identical sent counts and rates, and only the draw count would have
+     * differed — which is a much weaker signal than the one the counters are supposed to give.
+     */
+    @Test
+    fun aPushWithNoWidgetPlacedIsNotASend() {
+        WidgetTelemetry.notePushAdmitted(t0)                       // warm-up
+        for (m in 1..10) {
+            WidgetTelemetry.notePushAdmitted(t0 + m * 60_000L)
+            WidgetTelemetry.notePushNoWidget()
+        }
+        val s = WidgetTelemetry.snapshot(t0 + 660_000L)
+        assertEquals(11, s.pushesAdmitted)
+        assertEquals(1, s.pushesSent)                              // only the warm-up push had a widget
+        assertEquals(0.0, s.pushesPerHour!!, 0.001)                // nothing was sent in the window
+        val line = s.render()
+        assertTrue(line, "1 sent / 11 admitted" in line)
+        assertTrue(line, "10 with no widget placed" in line)
+    }
+
+    /**
+     * The two non-send outcomes are different answers and must not be conflated: "nothing new to
+     * show" is the rendered gate doing its job, "nobody to show it to" is the widget being absent.
+     */
+    @Test
+    fun theTwoNonSendOutcomesAreReportedApart() {
+        WidgetTelemetry.notePushAdmitted(t0)
+        for (m in 1..10) WidgetTelemetry.notePushAdmitted(t0 + m * 60_000L)
+        repeat(3) { WidgetTelemetry.notePushUnchanged() }
+        repeat(2) { WidgetTelemetry.notePushNoWidget() }
+        val s = WidgetTelemetry.snapshot(t0 + 660_000L)
+        assertEquals(6, s.pushesSent)                              // 11 - 3 - 2
+        val line = s.render()
+        assertTrue(line, "3 unchanged" in line)
+        assertTrue(line, "2 with no widget placed" in line)
     }
 }
