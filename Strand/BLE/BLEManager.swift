@@ -4507,6 +4507,23 @@ public final class BLEManager: NSObject, ObservableObject {
         }
         // The watchdog above is the whole of the keep-alive an unbonded 5/MG can use. Everything below
         // sends puffin-framed work that needs the encrypted bond.
+        //
+        // #1953: an unbonded 5/MG (the #1635 suppressed-hello case) still gets a periodic 0x2A19 battery
+        // read on Android — `keepAliveFire` there gates on `bonded` (the live-HR shortcut), not on the
+        // encrypted bond, and polls battery on the same ~60 s cadence regardless. iOS gates the tick on
+        // `keepAliveMayRun` (which admits `bonded && .whoop5`) but the battery read lives inside
+        // `enableLiveNotifications`, which is `didBond`-gated — so the tick fires and the read does not,
+        // and an unbonded 5/MG's battery % refreshes only when the UI asks. Poll 0x2A19 here on the SAME
+        // throttle `enableLiveNotifications` uses, so the two platforms read at the same cadence without
+        // doubling the rate on a bonded strap (this path only runs when `!didBond`).
+        if !didBond, selectedModel.deviceFamily == .whoop5,
+           let p = peripheral, let b = batteryCharacteristic, b.properties.contains(.read),
+           BLEManager.shouldPollWhoop5Battery(lastReadAt: lastBatteryReadAt,
+                                              charging: state.charging == true) {
+            p.readValue(for: b)
+            lastBatteryReadAt = Date()
+            log("Reading 5/MG battery (unbonded keep-alive) (#1953)")
+        }
         guard didBond else { return }
         guard !backfilling else { return }            // never poke the strap mid-offload
         // #927: continuous capture can be overnight-only, which makes the want TIME-dependent; nothing
@@ -4554,10 +4571,11 @@ public final class BLEManager: NSObject, ObservableObject {
         // `enableLiveNotifications` is separately gated on `didBond`, so on a #1635 strap the tick fires
         // and that read does not.
         //
-        // Which leaves a real divergence, pre-existing and NOT introduced here: Android's keep-alive polls
-        // 0x2A19 for a 5/MG whenever it runs, while this one skips it unless `didBond`. An unbonded 5/MG
-        // therefore gets a periodic battery read on Android and none here. The pack's charge comes from
-        // the pushed pack-info event (109) on both, that flag's only writer since #1945.
+        // #1953 closed that divergence: the unbonded 5/MG battery read now fires from the keep-alive tick
+        // itself (above the `guard didBond` line), on the SAME throttle `enableLiveNotifications` uses, so
+        // an unbonded 5/MG gets a periodic battery read on iOS at the same ~60 s cadence Android does. The
+        // pack's charge comes from the pushed pack-info event (109) on both, that flag's only writer since
+        // #1945.
         //
         // This leaves opcode 151 with NO sender on iOS, which is the state `FrameRouter` already records
         // for its own decoder ("nothing sent the command, so the decoder had no caller"). Android keeps a
