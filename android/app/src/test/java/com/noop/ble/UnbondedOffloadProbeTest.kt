@@ -608,4 +608,100 @@ class UnbondedOffloadProbeTest {
         )!!
         assertTrue(spent, spent.contains("silent-link budget is spent"))
     }
+
+    // MARK: - #1804: local teardown is inconclusive, not a strap verdict
+
+    /** The field capture: status=22 (GATT_CONN_TERMINATE_LOCAL_HOST). This is the exact case that
+     *  latched the probe permanently on the reporting install — a local teardown counted as a strap
+     *  refusal. The origin is NOT a parameter: it does not affect the verdict, and a parameter that
+     *  cannot change the answer invites the next reader to believe it can. */
+    @Test
+    fun `a local teardown is inconclusive regardless of origin`() {
+        assertTrue(unbondedProbeLinkLostIsLocalTeardown(status = 22))
+    }
+
+    /** A supervision timeout (status=8, GATT_CONN_TIMEOUT) is the STRAP dropping the link — that IS
+     *  evidence about the strap and should charge the silence budget. */
+    @Test
+    fun `a strap-side timeout is not a local teardown`() {
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 8))
+    }
+
+    /** Any other status (e.g. 19, 133) is also not a local teardown. */
+    @Test
+    fun `other statuses are not local teardowns`() {
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 19))
+        assertFalse(unbondedProbeLinkLostIsLocalTeardown(status = 133))
+    }
+
+    /** The inconclusive line names the stage and the origin, and says it does not consume a SILENCE
+     *  budget attempt — so a reader of the log knows the silence budget is not spent. It DOES charge
+     *  the inconclusive budget, but that has its own larger cap (#1804). */
+    @Test
+    fun `the inconclusive line names stage and origin and says it does not charge silence`() {
+        val line = unbondedProbeLinkLostLocalTeardownLine(
+            uptimeMs = 10776, stage = 1, localTeardownOrigin = null,
+        )
+        assertTrue(line, line.contains("terminated locally"))
+        assertTrue(line, line.contains("10776ms"))
+        assertTrue(line, line.contains("while subscribing"))
+        assertTrue(line, line.contains("via=unknown"))
+        assertTrue(line, line.contains("inconclusive"))
+        assertTrue(line, line.contains("does not consume"))
+    }
+
+    @Test
+    fun `the inconclusive line for stage 2 names GET_CLOCK`() {
+        val line = unbondedProbeLinkLostLocalTeardownLine(
+            uptimeMs = 10761, stage = 2, localTeardownOrigin = "bondWatchdog",
+        )
+        assertTrue(line, line.contains("after GET_CLOCK went out"))
+        assertTrue(line, line.contains("via=bondWatchdog"))
+    }
+
+    // MARK: - #1804: inconclusive budget bounds the retry
+
+    /** A local teardown is weaker evidence than silence, so it gets its own LARGER cap. The probe
+     *  retires when the inconclusive budget is spent, so a strap whose every link is torn down
+     *  locally does not retry forever. */
+    @Test
+    fun `inconclusive budget is larger than the silence budget`() {
+        assertTrue(UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS > UNBONDED_PROBE_MAX_SILENT_LINKS)
+    }
+
+    @Test
+    fun `probe retires when inconclusive budget is spent`() {
+        assertTrue(unbondedProbeRetired(
+            previouslyRefused = false,
+            silentLinksSoFar = 0,
+            inconclusiveLinksSoFar = UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS,
+        ))
+    }
+
+    @Test
+    fun `probe does not retire when inconclusive budget is not yet spent`() {
+        assertFalse(unbondedProbeRetired(
+            previouslyRefused = false,
+            silentLinksSoFar = 0,
+            inconclusiveLinksSoFar = UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS - 1,
+        ))
+    }
+
+    /** The skipped line names the inconclusive budget when that is what retired the probe. */
+    @Test
+    fun `skipped line names inconclusive budget when it is the reason`() {
+        val line = unbondedProbeSkippedLine(
+            isWhoop5 = true,
+            optedIn = true,
+            bonded = false,
+            helloWrittenThisLink = false,
+            alreadyProbedThisLink = false,
+            previouslyRefused = false,
+            silentLinksSoFar = 0,
+            inconclusiveLinksSoFar = UNBONDED_PROBE_MAX_INCONCLUSIVE_LINKS,
+        )
+        assertNotNull(line, line)
+        assertTrue(line!!, line.contains("inconclusive-link budget is spent"))
+        assertTrue(line, line.contains("our own stack"))
+    }
 }
