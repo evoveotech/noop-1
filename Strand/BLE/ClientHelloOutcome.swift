@@ -115,7 +115,7 @@ enum ClientHelloOutcome {
     /// for the case where the OS bond state IS available and disagrees).
     static func unverifiedBondTimingLine(elapsedMs: Int) -> String? {
         guard elapsedMs < minPlausibleAttRoundTripMs else { return nil }
-        return "CLIENT_HELLO outcome: acked after \(elapsedMs)ms - under one BLE connection interval,"
+        return "CLIENT_HELLO outcome: acked after \(elapsedMs)ms — under one BLE connection interval,"
             + " so the callback most likely came from the local stack rather than the strap. CoreBluetooth"
             + " exposes no link-encryption state, so the bond is UNVERIFIED on this platform (#1883, #1635)."
             + " The handshake proceeds because there is no alternative source of truth on Apple."

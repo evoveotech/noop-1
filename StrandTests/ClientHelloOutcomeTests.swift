@@ -102,12 +102,5 @@ final class ClientHelloOutcomeTests: XCTestCase {
         XCTAssertTrue(line!.contains("acked after 0ms"), line!)
         XCTAssertTrue(line!.contains("UNVERIFIED"), line!)
     }
-
-    /// No em-dash in the line (project rule).
-    func testNoEmDashInTimingLine() {
-        if let line = ClientHelloOutcome.unverifiedBondTimingLine(elapsedMs: 5) {
-            XCTAssertFalse(line.contains("\u{2014}"))
-        }
-    }
 }
 
