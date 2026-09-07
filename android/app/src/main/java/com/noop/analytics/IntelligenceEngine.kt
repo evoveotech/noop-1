@@ -2931,8 +2931,8 @@ object IntelligenceEngine {
     }
 
     /**
-     * The night's resting-HR diagnostic lines: the floor-vs-mean explainer, and the measure-only
-     * bin-population line beside it when there is something to say.
+     * The night's resting-HR diagnostic lines: the floor-vs-mean explainer, and the #1943
+     * conformance line beside it when the gate and the shipped floor disagree.
      *
      * Built here rather than inline in `analyzeRecentOnCpu` because that method is BUDGETED:
      * [IntelligenceEngineJacocoBudgetTest] ratchets its JaCoCo-instrumented size against the JVM's method

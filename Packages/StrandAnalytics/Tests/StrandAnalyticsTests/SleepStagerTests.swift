@@ -923,6 +923,68 @@ final class SleepStagerTests: XCTestCase {
         }
     }
 
+    // MARK: - #1943: sessionRestingHR bin-population + plausibility gates
+
+    // A one-sample bin at a dropout bpm would have won the floor before the gate. The gate excludes
+    // it (winnerN < minBinSamples), and the floor falls back to the next-best qualifying bin.
+    func testSessionRestingHRThinBinCannotWinTheFloor() {
+        // 300 samples at 60 in the first bin (qualifies), one sample at 38 in the final bin (thin).
+        // Before #1943 the floor was 38; now the thin bin is excluded and the floor is 60.
+        var hr: [HRSample] = (0..<300).map { HRSample(ts: $0, bpm: 60) }
+        hr.append(HRSample(ts: 600, bpm: 38))
+        XCTAssertEqual(SleepStager.sessionRestingHR(start: 0, end: 600, hr: hr), 60,
+                       "a one-sample bin cannot win the floor under the #1943 gate")
+    }
+
+    // A sub-physiological mean (below 25 bpm) is excluded even when the bin is well-populated, so a
+    // dropout artefact sustained across several samples cannot become the resting HR either.
+    func testSessionRestingHRImplausibleBinCannotWinTheFloor() {
+        // 300 samples at 60 (qualifies), then 300 samples at 20 (well-populated but implausible).
+        // Before #1943 the floor was 20; now the implausible bin is excluded and the floor is 60.
+        let hr: [HRSample] = (0..<300).map { HRSample(ts: $0, bpm: 60) }
+            + (300..<600).map { HRSample(ts: $0, bpm: 20) }
+        XCTAssertEqual(SleepStager.sessionRestingHR(start: 0, end: 600, hr: hr), 60,
+                       "a sub-25 bpm bin cannot win the floor under the #1943 gate")
+    }
+
+    // When every bin is thin or implausible, the gate falls back to the lowest of ALL bin means
+    // (ungated), preserving the never-null-on-data behaviour. The floor is the same as before the
+    // gate existed.
+    func testSessionRestingHRAllBinsGatedFallsBackToUngatedMin() {
+        // Two bins, each with one sample: 40 and 50. Neither qualifies (both thin). The fallback
+        // is the min of all bin means = 40, the same value the ungated path produced.
+        let hr: [HRSample] = [HRSample(ts: 0, bpm: 40), HRSample(ts: 300, bpm: 50)]
+        XCTAssertEqual(SleepStager.sessionRestingHR(start: 0, end: 600, hr: hr), 40,
+                       "when no bin qualifies, the floor falls back to the ungated min")
+    }
+
+    // A dense, ordinary night (every bin well-populated and plausible) is unchanged by the gate.
+    func testSessionRestingHRDenseNightUnchangedByGate() {
+        let hr: [HRSample] = (0..<1800).map { HRSample(ts: $0, bpm: 60) }
+        XCTAssertEqual(SleepStager.sessionRestingHR(start: 0, end: 1800, hr: hr), 60,
+                       "a well-populated night is unchanged by the gate")
+    }
+
+    // The gate's threshold is exactly 5 samples: a bin with 5 qualifies, a bin with 4 does not.
+    func testSessionRestingHRBinSampleCountBoundary() {
+        // First bin: 300 samples at 70 (qualifies). Final bin: 4 samples at 40 (below threshold).
+        // The 4-sample bin is excluded; the floor is 70.
+        var hr: [HRSample] = (0..<300).map { HRSample(ts: $0, bpm: 70) }
+        hr.append(contentsOf: (0..<4).map { _ in HRSample(ts: 600, bpm: 40) })
+        XCTAssertEqual(SleepStager.sessionRestingHR(start: 0, end: 600, hr: hr), 70,
+                       "a 4-sample bin is below the minBinSamples=5 threshold and cannot win")
+    }
+
+    // The plausibility gate's threshold is exactly 25 bpm: a mean of 25 qualifies, 24.9 does not.
+    func testSessionRestingHRPlausibilityBoundary() {
+        // First bin: 300 samples at 60 (qualifies). Final bin: 300 samples at 24 (implausible).
+        // The 24-bpm bin is excluded; the floor is 60.
+        let hr: [HRSample] = (0..<300).map { HRSample(ts: $0, bpm: 60) }
+            + (300..<600).map { HRSample(ts: $0, bpm: 24) }
+        XCTAssertEqual(SleepStager.sessionRestingHR(start: 0, end: 600, hr: hr), 60,
+                       "a 24-bpm mean is below the minPlausibleBpm=25 threshold and cannot win")
+    }
+
     func testSessionHrvWindowsAlignedEndpointBeatsFillTheFinalWindow() {
         // 120 beats in the opening window plus three beats exactly on an aligned end = 600. The
         // second window is the final one, so it closes on `end` and holds those three beats;

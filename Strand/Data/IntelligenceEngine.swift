@@ -1502,7 +1502,8 @@ final class IntelligenceEngine: ObservableObject {
                         res.cachedSleep.contains { s.ts >= $0.startTs && s.ts < $0.endTs }
                     }.map { $0.bpm }
                     rhrLine = Self.rhrFloorMeanLogLine(day: res.daily.day, floor: floor, inBedBpms: inBedBpms)
-                    // #1943: and what an artefact gate would do to that floor. Silent on a clean night.
+                    // #1943: conformance check that the gate `sessionRestingHR` now applies agrees with
+                    // the shipped floor. Silent when the gate is correctly applied.
                     rhrBinLine = SleepStager.rhrBinGateLogLine(
                         day: res.daily.day,
                         sessions: res.cachedSleep.map { ($0.startTs, $0.endTs) },

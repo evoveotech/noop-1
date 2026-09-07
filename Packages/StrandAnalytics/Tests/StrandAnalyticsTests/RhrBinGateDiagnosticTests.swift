@@ -2,36 +2,43 @@ import XCTest
 import WhoopProtocol
 @testable import StrandAnalytics
 
-/// #1943 measure-only: the line must describe the partition `sessionRestingHR` actually uses, and must
-/// stay silent unless an artefact gate would MOVE the floor. Byte-parity twin of Kotlin
-/// `RhrBinGateDiagnosticTest`.
+/// #1943 conformance check: the line reports when the gate MOVED the floor by comparing the UNGATED
+/// floor (the old rule: min over every non-empty bin) against the shipped one (which IS the gated
+/// floor). The line fires when the gate excluded the bin that would otherwise have won — which is
+/// the frequency and magnitude the measure-only diagnostic was meant to learn. Byte-parity twin of
+/// Kotlin `RhrBinGateDiagnosticTest`.
 final class RhrBinGateDiagnosticTests: XCTestCase {
 
     private func hr(_ start: Int, _ count: Int, _ bpm: Int) -> [HRSample] {
         (0..<count).map { HRSample(ts: start + $0, bpm: bpm) }
     }
 
-    /// A dense, ordinary night: every bin well-populated, so the gate would change nothing. Silent.
+    /// A dense, ordinary night: every bin well-populated, so the gate moves nothing. Silent.
     func testAWellPopulatedNightSaysNothing() {
         let start = 1_000, end = 1_000 + 1800
         XCTAssertNil(SleepStager.rhrBinGateLogLine(day: "2026-01-01", sessions: [(start, end)],
                                                    hr: hr(start, 1800, 60), shippedFloor: 60))
     }
 
-    /// A one-sample bin that WINS the floor is the whole point: it must be reported, and named.
-    func testAThinWinningBinIsReportedWithWhatTheGateWouldDo() {
+    /// A one-sample bin that WINS under the old rule is the whole point: the gate excludes it, so
+    /// the ungated floor (38) differs from the shipped/gated floor (60), and the line fires.
+    func testAThinWinningBinIsReportedAsGateMoved() {
         let start = 1_000, end = 1_000 + 1800
         let samples = hr(start, 1500, 60) + [HRSample(ts: start + 1700, bpm: 38)]
+        // shippedFloor is 60 — the gated floor that sessionRestingHR now ships.
         let line = SleepStager.rhrBinGateLogLine(day: "2026-01-01", sessions: [(start, end)],
-                                                 hr: samples, shippedFloor: 38)
+                                                 hr: samples, shippedFloor: 60)
         XCTAssertNotNil(line, "a thin winning bin must be reported")
         XCTAssertTrue(line!.contains("thin=1"), line!)
         XCTAssertTrue(line!.contains("winnerN=1"), line!)
-        XCTAssertTrue(line!.contains("wouldChange=true"), line!)
+        XCTAssertTrue(line!.contains("ungated=38"), line!)
         XCTAssertTrue(line!.contains("gated=60"), line!)
+        XCTAssertTrue(line!.contains("shipped=60"), line!)
+        XCTAssertTrue(line!.contains("gateMoved=true"), line!)
     }
 
-    /// A thin bin that cannot win the floor is silent: a thin FINAL bin is structural on most spans.
+    /// A thin bin that cannot win the floor even under the old rule is silent: the ungated floor
+    /// matches the shipped one, so the gate moved nothing.
     func testAThinBinThatCannotWinTheFloorIsSilent() {
         let start = 1_000, end = 1_000 + 1800
         let samples = hr(start, 1500, 60) + [HRSample(ts: start + 1700, bpm: 90)]
@@ -52,15 +59,15 @@ final class RhrBinGateDiagnosticTests: XCTestCase {
         let start = 1_700_000_000, end = 1_700_000_000 + 1800
         let samples = hr(start, 1500, 60) + [HRSample(ts: start + 1700, bpm: 38)]
         let line = SleepStager.rhrBinGateLogLine(day: "2026-01-01", sessions: [(start, end)],
-                                                 hr: samples, shippedFloor: 38)
+                                                 hr: samples, shippedFloor: 60)
         XCTAssertNotNil(line)
         XCTAssertFalse(line!.contains("17000000"), line!)
     }
 
     /// The load-bearing invariant: the line must judge the SAME partition `sessionRestingHR` ships.
-    /// Every other case hands the floor in as a literal, so none would notice the two binnings drifting.
-    /// Here the shipped floor comes FROM `sessionRestingHR`, and a mismatch surfaces as a spurious
-    /// `wouldChange`. The 1801 span is deliberate: its final bin holds two samples, structurally thin.
+    /// Here the shipped floor comes FROM `sessionRestingHR`, and the gate agrees, so the ungated
+    /// floor matches the shipped one and the line stays silent. The 1801 span is deliberate: its
+    /// final bin holds two samples, structurally thin.
     func testTheDiagnosticJudgesTheSamePartitionSessionRestingHRShips() {
         let start = 1_000
         for spanS in [1800, 1801, 1500, 300, 299] {

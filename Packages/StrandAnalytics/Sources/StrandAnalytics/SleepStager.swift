@@ -71,6 +71,17 @@ public struct SleepSession: Equatable, Sendable {
 
 public enum SleepStager {
 
+    // MARK: - #1943: RHR bin-gate thresholds (shared by sessionRestingHR and rhrBinGateLogLine)
+    // One constant per threshold, read by both the gate and its conformance check, so a drift
+    // between the two is structurally impossible rather than merely documented.
+
+    /// Minimum samples in a 5-min bin for it to qualify as a candidate for the night's resting HR.
+    /// A one-sample bin at the edge of a wear gap cannot become the floor.
+    public static let rhrMinBinSamples: Int = 5
+    /// Minimum plausible mean HR (bpm) for a bin to qualify. A dropout-driven sub-physiological
+    /// dip cannot become the floor.
+    public static let rhrMinPlausibleBpm: Double = 25
+
     // MARK: - Stage 0 constants (sleep.py)
 
     /// Per-sample gravity change (g) at/below which a sample is "still".
@@ -2778,36 +2789,34 @@ public enum SleepStager {
     /// the final one, which is `[t, end]`. Half-open bins alone would admit a sample sitting exactly
     /// on an aligned `end` through the prefilter and then place it in no bin — counted as data,
     /// silently ignored. A zero-length window (`start == end`) is that single closed bin.
-    /// #1943: what an artefact gate WOULD do to tonight's resting-HR floor, measured and reported without
-    /// changing it.
+    /// #1943: a conformance check that reports when the artefact gate `sessionRestingHR` applies
+    /// actually MOVED the floor. The shipped floor IS the gated floor, so comparing the gated floor
+    /// against it is silent by construction. Instead, this reports the UNGATED floor (the old rule:
+    /// min over every non-empty bin) against the shipped one, so the line fires when the gate
+    /// excluded the bin that would otherwise have won — which is exactly the frequency and magnitude
+    /// the measure-only diagnostic was meant to learn, and would never have reported otherwise.
     ///
-    /// `sessionRestingHR` takes the minimum of the 5-minute bin means unconditionally, so any non-empty
-    /// bin can win, including one built from a single sample at the edge of a wear gap. The helper deleted
-    /// alongside it had two conditions the shipped path never had: a bin may only WIN when it holds at
-    /// least `minBinSamples` samples and its mean is at least `minPlausibleBpm`. Porting them is a small
-    /// change; what nobody can currently say is how OFTEN it would move a displayed number, and that
-    /// number feeds the baseline later nights are scored against. So measure first.
+    /// `sessionRestingHR` gates bins on `rhrMinBinSamples` and `rhrMinPlausibleBpm` before letting them
+    /// win the floor, falling back to the lowest of all bin means when no bin qualifies. This helper
+    /// reproduces the same partition and the same gate, and ALSO computes the ungated floor (min over
+    /// every non-empty bin, the pre-#1943 rule) so the two can be compared.
     ///
     /// Bins are built exactly as `sessionRestingHR` builds them, closed final bin included, or the line
     /// would describe a different partition than the one it is judging.
     ///
-    /// Returns nil unless the gate would actually MOVE the floor, so the log carries only the nights the
-    /// question is about. Reporting every thin bin instead would fire on nearly all of them, because a thin
-    /// final bin is STRUCTURAL rather than an artefact: the last bin closes on `end`, so a session whose
-    /// span is not a multiple of the window holds only `span mod 300` samples there. A 1801-second night
-    /// has six 300-sample bins and a final bin of two. That bin is real data and almost never wins the
-    /// floor, so it is noise to report and, separately, something a future gate should weigh before
-    /// excluding bins on sample count alone.
+    /// Returns nil unless the gate actually MOVED the floor (ungated != shipped), so the log carries
+    /// only the nights the gate did something. If it turns out to fire on one night in fifty, that is
+    /// worth knowing; if it fires nightly, that is worth knowing sooner.
     ///
     /// The counts still ride along when the line does fire, since they are the context for the change.
     /// Same posture as the over-count-only R-R dump. Counts and bpm only, no timestamps. Pure. Twin of
     /// Kotlin `rhrBinGateLogLine`.
     public static func rhrBinGateLogLine(day: String, sessions: [(Int, Int)], hr: [HRSample],
-                                         shippedFloor: Int, minBinSamples: Int = 5,
-                                         minPlausibleBpm: Double = 25) -> String? {
+                                         shippedFloor: Int, minBinSamples: Int = rhrMinBinSamples,
+                                         minPlausibleBpm: Double = rhrMinPlausibleBpm) -> String? {
         let windowS = 5 * 60
-        var bins = 0, thin = 0, implausible = 0, bestN = 0
-        var best: Double?
+        var bins = 0, thin = 0, implausible = 0, ungatedN = 0
+        var ungated: Double?
         var gated: Double?
         for (start, end) in sessions {
             let seg = hr.filter { $0.ts >= start && $0.ts <= end }
@@ -2821,7 +2830,7 @@ public enum SleepStager {
                     let mean = Double(win.reduce(0) { $0 + $1.bpm }) / Double(win.count)
                     if win.count < minBinSamples { thin += 1 }
                     if mean < minPlausibleBpm { implausible += 1 }
-                    if best == nil || mean < best! { best = mean; bestN = win.count }
+                    if ungated == nil || mean < ungated! { ungated = mean; ungatedN = win.count }
                     if win.count >= minBinSamples, mean >= minPlausibleBpm,
                        gated == nil || mean < gated! { gated = mean }
                 }
@@ -2829,19 +2838,30 @@ public enum SleepStager {
             } while t < end
         }
         if bins == 0 { return nil }
+        let ungatedFloor = ungated.map { Int($0.rounded()) }
+        // The gate moved the floor when the ungated floor differs from the shipped one. The shipped
+        // floor IS the gated floor, so this fires when the gate excluded the bin that would have won
+        // under the old rule — which is the frequency and magnitude we want to learn.
+        let moved = ungatedFloor != nil && ungatedFloor != shippedFloor
+        if !moved { return nil }
         let gatedFloor = gated.map { Int($0.rounded()) }
-        let changes = gatedFloor != nil && gatedFloor != shippedFloor
-        if !changes { return nil }
         return "rhr bins day=\(day) bins=\(bins) thin=\(thin) implausible=\(implausible) "
-            + "winnerN=\(bestN) floor=\(shippedFloor) gated=\(gatedFloor.map(String.init) ?? "nil") "
-            + "wouldChange=\(changes) (measure-only; nothing is gated yet)"
+            + "winnerN=\(ungatedN) ungated=\(ungatedFloor.map(String.init) ?? "nil") "
+            + "gated=\(gatedFloor.map(String.init) ?? "nil") shipped=\(shippedFloor) gateMoved=\(moved)"
     }
 
     static func sessionRestingHR(start: Int, end: Int, hr: [HRSample]) -> Int? {
         let seg = hr.filter { $0.ts >= start && $0.ts <= end }
         guard !seg.isEmpty else { return nil }
         let windowS = 5 * 60
-        var means: [Double] = []
+        // #1943: a bin qualifies to WIN the floor only when it is well-populated (≥ rhrMinBinSamples)
+        // and its mean is physiologically plausible (≥ rhrMinPlausibleBpm). A one-sample bin at the
+        // edge of a wear gap, or a dropout-driven sub-physiological dip, cannot become the night's
+        // resting HR — that number is displayed, stored on the daily row, and fed to the baseline
+        // later nights are scored against. If no bin qualifies, fall back to the lowest of ALL bin
+        // means (ungated), then the all-sample mean — preserving the never-null-on-data behaviour.
+        var gatedMeans: [Double] = []
+        var allMeans: [Double] = []
         var t = start
         repeat {
             // The last bin (its half-open end reaches or passes `end`) closes on `end` instead,
@@ -2850,10 +2870,15 @@ public enum SleepStager {
             // zero-length window, where that single closed bin is the whole window.
             let isFinal = t + windowS >= end
             let win = seg.filter { $0.ts >= t && (isFinal || $0.ts < t + windowS) }
-            if !win.isEmpty { means.append(Double(win.reduce(0) { $0 + $1.bpm }) / Double(win.count)) }
+            if !win.isEmpty {
+                let mean = Double(win.reduce(0) { $0 + $1.bpm }) / Double(win.count)
+                allMeans.append(mean)
+                if win.count >= rhrMinBinSamples && mean >= rhrMinPlausibleBpm { gatedMeans.append(mean) }
+            }
             t += windowS
         } while t < end
-        if let m = means.min() { return Int(m.rounded()) }
+        if let m = gatedMeans.min() { return Int(m.rounded()) }
+        if let m = allMeans.min() { return Int(m.rounded()) }
         let all = Double(seg.reduce(0) { $0 + $1.bpm }) / Double(seg.count)
         return Int(all.rounded())
     }

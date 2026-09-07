@@ -6,16 +6,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * #1943 measure-only: the line must describe the partition `sessionRestingHR` actually uses, and must
- * stay silent on a night where an artefact gate would change nothing. A diagnostic that fired every
- * night would be ignored; one that fired on the wrong bins would argue for a change on false evidence.
+ * #1943 conformance check: the line reports when the gate MOVED the floor by comparing the UNGATED
+ * floor (the old rule: min over every non-empty bin) against the shipped one (which IS the gated
+ * floor). The line fires when the gate excluded the bin that would otherwise have won — which is
+ * the frequency and magnitude the measure-only diagnostic was meant to learn.
  */
 class RhrBinGateDiagnosticTest {
 
     private fun hr(start: Long, count: Int, bpm: Int, step: Long = 1L) =
         (0 until count).map { HrSample("d", start + it * step, bpm) }
 
-    /** A dense, ordinary night: every bin well-populated, so the gate would change nothing. Silent. */
+    /** A dense, ordinary night: every bin well-populated, so the gate moves nothing. Silent. */
     @Test fun aWellPopulatedNightSaysNothing() {
         val start = 1_000L
         val end = start + 1800                       // 6 bins at 1 Hz
@@ -23,19 +24,23 @@ class RhrBinGateDiagnosticTest {
         assertNull(SleepStager.rhrBinGateLogLine("2026-01-01", listOf(start to end), samples, 60))
     }
 
-    /** A one-sample bin that WINS the floor is the whole point: it must be reported, and named. */
-    @Test fun aThinWinningBinIsReportedWithWhatTheGateWouldDo() {
+    /** A one-sample bin that WINS under the old rule is the whole point: the gate excludes it, so
+     *  the ungated floor (38) differs from the shipped/gated floor (60), and the line fires. */
+    @Test fun aThinWinningBinIsReportedAsGateMoved() {
         val start = 1_000L
         val end = start + 1800
         // Five dense bins at 60 bpm, then a single stray low sample alone in the last bin.
         val dense = hr(start, 1500, 60)
         val stray = listOf(HrSample("d", start + 1700, 38))
-        val line = SleepStager.rhrBinGateLogLine("2026-01-01", listOf(start to end), dense + stray, 38)
+        // shippedFloor is 60 — the gated floor that sessionRestingHR now ships.
+        val line = SleepStager.rhrBinGateLogLine("2026-01-01", listOf(start to end), dense + stray, 60)
         assertTrue("a thin winning bin must be reported, got: $line", line != null)
         assertTrue("must count the thin bin, got: $line", line!!.contains("thin=1"))
         assertTrue("must name the winning bin's size, got: $line", line.contains("winnerN=1"))
-        assertTrue("must say the gate would move the floor, got: $line", line.contains("wouldChange=true"))
-        assertTrue("must report the gated floor it would use instead, got: $line", line.contains("gated=60"))
+        assertTrue("must report the ungated floor, got: $line", line.contains("ungated=38"))
+        assertTrue("must report the gated floor, got: $line", line.contains("gated=60"))
+        assertTrue("must report the shipped floor, got: $line", line.contains("shipped=60"))
+        assertTrue("must say the gate moved the floor, got: $line", line.contains("gateMoved=true"))
     }
 
     /** A thin bin that does NOT win is silent: a thin FINAL bin is structural on most spans, not a finding. */
@@ -54,10 +59,9 @@ class RhrBinGateDiagnosticTest {
      * The load-bearing invariant: the line must judge the SAME partition `sessionRestingHR` ships.
      *
      * Every other case here hands the floor in as a literal, so none of them would notice the two
-     * binnings drifting apart, and a diagnostic describing a different partition than the one it is
-     * measuring would argue for a change on false evidence. Here the shipped floor comes FROM
-     * `sessionRestingHR`, and on a night where no bin is thin the gate must agree with it exactly, which
-     * the line reports by staying silent. A partition mismatch shows up as a spurious `wouldChange`.
+     * binnings drifting apart. Here the shipped floor comes FROM `sessionRestingHR`, and on a night
+     * where no bin is thin the gate must agree with it exactly, which the line reports by staying
+     * silent. A partition mismatch shows up as a spurious `gateMoved`.
      */
     @Test fun theDiagnosticJudgesTheSamePartitionSessionRestingHrShips() {
         val start = 1_000L
@@ -89,7 +93,7 @@ class RhrBinGateDiagnosticTest {
         val end = start + 1800
         val line = SleepStager.rhrBinGateLogLine(
             "2026-01-01", listOf(start to end),
-            hr(start, 1500, 60) + listOf(HrSample("d", start + 1700, 38)), 38,
+            hr(start, 1500, 60) + listOf(HrSample("d", start + 1700, 38)), 60,
         )
         assertTrue(line != null)
         assertTrue("must not leak an epoch timestamp, got: $line", !line!!.contains("17000000"))

@@ -93,6 +93,78 @@ class SleepStagerWindowEndpointTest {
         }
     }
 
+    // MARK: - #1943: sessionRestingHR bin-population + plausibility gates
+
+    @Test
+    fun thinBinCannotWinTheFloor() {
+        // 300 samples at 60 in the first bin (qualifies), one sample at 38 in the final bin (thin).
+        // Before #1943 the floor was 38; now the thin bin is excluded and the floor is 60.
+        val samples = ArrayList<HrSample>()
+        for (i in 0 until 300) samples.add(hr(i.toLong(), 60))
+        samples.add(hr(600L, 38))
+        assertEquals(
+            "a one-sample bin cannot win the floor under the #1943 gate",
+            60, SleepStager.sessionRestingHR(0L, 600L, samples)
+        )
+    }
+
+    @Test
+    fun implausibleBinCannotWinTheFloor() {
+        // 300 samples at 60 (qualifies), then 300 samples at 20 (well-populated but implausible).
+        // Before #1943 the floor was 20; now the implausible bin is excluded and the floor is 60.
+        val samples = ArrayList<HrSample>()
+        for (i in 0 until 300) samples.add(hr(i.toLong(), 60))
+        for (i in 300 until 600) samples.add(hr(i.toLong(), 20))
+        assertEquals(
+            "a sub-25 bpm bin cannot win the floor under the #1943 gate",
+            60, SleepStager.sessionRestingHR(0L, 600L, samples)
+        )
+    }
+
+    @Test
+    fun allBinsGatedFallsBackToUngatedMin() {
+        // Two bins, each with one sample: 40 and 50. Neither qualifies (both thin). The fallback
+        // is the min of all bin means = 40, the same value the ungated path produced.
+        val samples = listOf(hr(0L, 40), hr(300L, 50))
+        assertEquals(
+            "when no bin qualifies, the floor falls back to the ungated min",
+            40, SleepStager.sessionRestingHR(0L, 600L, samples)
+        )
+    }
+
+    @Test
+    fun denseNightUnchangedByGate() {
+        val samples = (0 until 1800).map { hr(it.toLong(), 60) }
+        assertEquals(
+            "a well-populated night is unchanged by the gate",
+            60, SleepStager.sessionRestingHR(0L, 1800L, samples)
+        )
+    }
+
+    @Test
+    fun binSampleCountBoundary() {
+        // First bin: 300 samples at 70 (qualifies). Final bin: 4 samples at 40 (below threshold).
+        val samples = ArrayList<HrSample>()
+        for (i in 0 until 300) samples.add(hr(i.toLong(), 70))
+        for (i in 0 until 4) samples.add(hr(600L, 40))
+        assertEquals(
+            "a 4-sample bin is below the minBinSamples=5 threshold and cannot win",
+            70, SleepStager.sessionRestingHR(0L, 600L, samples)
+        )
+    }
+
+    @Test
+    fun plausibilityBoundary() {
+        // First bin: 300 samples at 60 (qualifies). Final bin: 300 samples at 24 (implausible).
+        val samples = ArrayList<HrSample>()
+        for (i in 0 until 300) samples.add(hr(i.toLong(), 60))
+        for (i in 300 until 600) samples.add(hr(i.toLong(), 24))
+        assertEquals(
+            "a 24-bpm mean is below the minPlausibleBpm=25 threshold and cannot win",
+            60, SleepStager.sessionRestingHR(0L, 600L, samples)
+        )
+    }
+
     @Test
     fun alignedEndpointBeatsFillTheFinalHrvWindow() {
         // 120 beats in the opening window plus three beats exactly on an aligned end = 600. The
