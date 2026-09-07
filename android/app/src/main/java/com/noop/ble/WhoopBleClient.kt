@@ -9856,6 +9856,14 @@ class WhoopBleClient(
                 explicitBondRequestedThisLink = explicitBondRequestedThisLink,
                 deferralsThisLink = backfillDeferralsThisLink,
                 msSinceConnect = if (connectedAtMs > 0L) System.currentTimeMillis() - connectedAtMs else -1L,
+                // #1802: name the unbonded-offload probe when the structural-unreachable case applies.
+                // The probe is the one action that exists for this state, and without this hint the
+                // diagnostic reads as hopeless when it is not.
+                unbondedProbeOptedIn = puffinExperiment.unbondedOffload,
+                unbondedProbeRetired = unbondedProbeRetired(
+                    previouslyRefused = unbondedOffloadPreviouslyRefused(lastDeviceAddress),
+                    silentLinksSoFar = unbondedProbeSilentLinks,
+                ),
             ))
             return
         }
