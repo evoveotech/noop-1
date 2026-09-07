@@ -109,7 +109,7 @@ object HrTrace {
     fun fitBox(widthPx: Int, heightPx: Int, maxBytes: Int = MAX_BITMAP_BYTES): Pair<Int, Int> {
         val w = widthPx.coerceAtLeast(1)
         val h = heightPx.coerceAtLeast(1)
-        val bytes = w.toLong() * h.toLong() * 4L
+        val bytes = w.toLong() * h.toLong() * BYTES_PER_PIXEL
         if (bytes <= maxBytes) return w to h
         val scale = Math.sqrt(maxBytes.toDouble() / bytes.toDouble())
         return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
@@ -118,6 +118,35 @@ object HrTrace {
     /** The bitmap's byte budget. Half a megabyte leaves the rest of the RemoteViews comfortable inside
      *  the transaction ceiling, and still affords a full-density chart on an ordinary phone. */
     const val MAX_BITMAP_BYTES: Int = 512 * 1024
+
+    /** Bytes per pixel the renderer actually spends. The trace is one hue over an opaque card, so it is
+     *  drawn RGB_565 rather than ARGB_8888 — there is no transparency to preserve, and at four bytes a
+     *  pixel the budget could not afford both a taller chart and a width that avoids stretching it. */
+    const val BYTES_PER_PIXEL: Int = 2
+
+    /**
+     * The widest bitmap the budget allows at an EXACT height, with headroom over what the caller asked.
+     *
+     * Two things force this. `LocalSize` under-reports on some launchers — a One UI card reported about
+     * 60% of its true width — so a bitmap rendered at the reported width is UPSCALED to fill, and only
+     * horizontally, which turns a round stroke elliptical and soft. And [fitBox] preserves aspect, so
+     * simply asking for a wider box would shrink the height too and trade a horizontal stretch for a
+     * vertical one.
+     *
+     * So: height is taken as given and never scaled, and the width gets what is left of the budget, up
+     * to [WIDTH_HEADROOM] times the request so a small widget does not allocate a huge strip for
+     * nothing. Downscaling is the cheap direction — a smooth line loses nothing to it.
+     */
+    fun widestAtHeight(requestedPx: Int, heightPx: Int, maxBytes: Int = MAX_BITMAP_BYTES): Int {
+        val h = heightPx.coerceAtLeast(1)
+        val budgetWidth = (maxBytes / (h * BYTES_PER_PIXEL)).coerceAtLeast(1)
+        val want = (requestedPx.coerceAtLeast(1) * WIDTH_HEADROOM).toInt()
+        return want.coerceAtMost(budgetWidth).coerceAtLeast(requestedPx.coerceAtLeast(1).coerceAtMost(budgetWidth))
+    }
+
+    /** How much wider than the reported width to draw, to cover a launcher that under-reports. Two
+     *  covers the ~1.6x seen on One UI with margin, and costs nothing a downscale does not absorb. */
+    const val WIDTH_HEADROOM: Float = 2f
 
     /** A point in the trace's pixel box, origin top-left, as the renderer wants it. */
     data class Pt(val x: Float, val y: Float)
