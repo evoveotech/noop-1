@@ -4539,13 +4539,33 @@ public final class BLEManager: NSObject, ObservableObject {
         }   // re-arm so it can't lapse
         keepAliveTick += 1
         // #battery: ~60 s normally, ~30 s while charging (see `batteryPollDue`).
-        if BLEManager.batteryPollDue(tick: keepAliveTick, charging: state.charging == true) {
+        //
+        // WHOOP 4.0 ONLY (#1948). Both commands this block used to send are refused on a 5/MG before they
+        // leave the app: the send allowlist has no clause for `.getBatteryLevel` at all, and admits
+        // `.getBatteryPackInfo` only while a user-initiated probe is in flight. Two dead sends and two
+        // skip lines per tick, under a comment claiming the pack "rides the SAME cadence as the strap's
+        // own gauge". It never rode anything.
+        //
+        // Removing them cannot change what a 5/MG receives, and that is the whole argument: the allowlist
+        // refused both before they reached the peripheral, so no reading ever depended on either. Do not
+        // reach for a subtler one. An earlier draft here argued that the `didBond` letting this tick run
+        // had already driven the 0x2A19 read a few lines above, which is wrong twice over —
+        // `keepAliveMayRun` also admits a `bonded && .whoop5` tick with `didBond` false, and
+        // `enableLiveNotifications` is separately gated on `didBond`, so on a #1635 strap the tick fires
+        // and that read does not.
+        //
+        // Which leaves a real divergence, pre-existing and NOT introduced here: Android's keep-alive polls
+        // 0x2A19 for a 5/MG whenever it runs, while this one skips it unless `didBond`. An unbonded 5/MG
+        // therefore gets a periodic battery read on Android and none here. The pack's charge comes from
+        // the pushed pack-info event (109) on both, that flag's only writer since #1945.
+        //
+        // This leaves opcode 151 with NO sender on iOS, which is the state `FrameRouter` already records
+        // for its own decoder ("nothing sent the command, so the decoder had no caller"). Android keeps a
+        // user-initiated probe for it; there is no iOS twin of that, so asking a 5/MG whether it answers
+        // 151 at all is an Android-side question today.
+        if selectedModel.deviceFamily != .whoop5,
+           BLEManager.batteryPollDue(tick: keepAliveTick, charging: state.charging == true) {
             send(.getBatteryLevel, payload: [])
-            // The 5/MG battery pack rides the SAME cadence as the strap's own gauge — it is the same
-            // question about the same physical thing, and a second timer would only be a second thing to
-            // get wrong. 5/MG only: a 4.0 never answers 151 (its pack is voltage-only via 98), so asking
-            // would be traffic with no reply.
-            if selectedModel.deviceFamily == .whoop5 { send(.getBatteryPackInfo, payload: []) }
         }
     }
 
