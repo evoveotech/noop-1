@@ -148,8 +148,8 @@ struct SleepModel {
     /// to the normal "vs typical" caption. When carried, returns "Carried · <date>" so a prior night's
     /// number is never passed off as tonight's read. Pure + unit-testable. Mirror EXACTLY in Kotlin.
     static func carriedMetricCaption(latestDay: String?, latest: Double?) -> String? {
-        guard latestDay != nil, latest != nil else { return nil }
-        return String(localized: "Carried · \(Self.shortDayLabel(latestDay!))")
+        guard let latestDay, latest != nil else { return nil }
+        return String(localized: "Carried · \(Self.shortDayLabel(latestDay))")
     }
 
     /// "12 Jul" for a "yyyy-MM-dd" key — the SAME format `TodayView.carriedCaption` uses for the

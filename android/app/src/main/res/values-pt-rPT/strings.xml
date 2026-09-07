@@ -2201,6 +2201,7 @@
     <string name="today_score_solid">FIÁVEL</string>
     <string name="today_charge_carried">Carga · %1$s</string>
     <string name="today_recovery_carried">Recuperação · %1$s</string>
+    <string name="sleep_carried_metric_caption">Herdado · %1$s</string>
     <string name="today_show_fewer_metrics">Mostrar menos</string>
     <string name="today_show_all_metrics">Mostrar todas as métricas (%1$d)</string>
     <string name="today_hr_empty_selected_day">Não há dados de frequência cardíaca para este dia. Recua até um dia em que tenhas usado a pulseira.</string>

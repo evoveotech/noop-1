@@ -2209,6 +2209,7 @@
     <string name="today_score_solid">SÓLIDO</string>
     <string name="today_charge_carried">Carga · %1$s</string>
     <string name="today_recovery_carried">Recuperación · %1$s</string>
+    <string name="sleep_carried_metric_caption">Heredado · %1$s</string>
     <string name="today_show_fewer_metrics">Mostrar menos</string>
     <string name="today_show_all_metrics">Mostrar todas las métricas (%1$d)</string>
     <string name="today_hr_empty_selected_day">No hay datos de frecuencia cardíaca para este día. Vuelve a un día en que llevaras la pulsera.</string>

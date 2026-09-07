@@ -31,7 +31,15 @@ internal fun tileCaption(
     latestDay: String?, latest: Double?, typical: Double?,
     suffix: String, decimals: Int = 0,
 ): String {
-    Metric.carriedMetricCaption(latestDay, latest)?.let { return it }
+    Metric.carriedMetricCaption(latestDay, latest)?.let { caption ->
+        // Resolve the DisplayText.Resource here so tileCaption stays String-returning for the
+        // SparkTile call sites. uiString reads the process Application resources, so this is
+        // locale-aware without being a @Composable.
+        return when (caption) {
+            is DisplayText.Resource -> uiString(caption.id, *caption.args.toTypedArray())
+            is DisplayText.Dynamic -> caption.value
+        }
+    }
     return vsTypical(latest, typical, suffix, decimals)
 }
 

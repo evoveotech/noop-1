@@ -29,17 +29,22 @@ internal data class Metric(
 ) {
 
     companion object {
-        /// #1946: the caption for a metric tile whose `latest` value was carried from a prior day.
-        /// Returns null when the value is NOT carried (today's own, or no value) so the caller falls
-        /// through to the normal "vs typical" caption. When carried, returns "Carried · <date>" so a
-        /// prior night's number is never passed off as tonight's read. Mirror EXACTLY in Swift.
-        fun carriedMetricCaption(latestDay: String?, latest: Double?): String? {
+        /** #1946: the caption for a metric tile whose `latest` value was carried from a prior day.
+         *  Returns null when the value is NOT carried (today's own, or no value) so the caller falls
+         *  through to the normal "vs typical" caption. When carried, returns a [DisplayText.Resource]
+         *  so the string lives in `strings.xml` where the i18n audit and the locale files can see it
+         *  — matching [carriedCaption] in TodayScoring, which solved the same problem for the Today
+         *  carry stamp. Mirror EXACTLY in Swift. */
+        fun carriedMetricCaption(latestDay: String?, latest: Double?): DisplayText? {
             if (latestDay == null || latest == null) return null
-            return "Carried · ${shortDayLabel(latestDay)}"
+            return DisplayText.Resource(
+                R.string.sleep_carried_metric_caption,
+                listOf(shortDayLabel(latestDay)),
+            )
         }
 
-        /// "12 Jul" for a "yyyy-MM-dd" key — the SAME format the Today carry stamp uses, so a carried
-        /// Rest on Today and a carried metric on Sleep read identically.
+        /** "12 Jul" for a "yyyy-MM-dd" key — the SAME format the Today carry stamp uses, so a carried
+         *  Rest on Today and a carried metric on Sleep read identically. */
         private val dayKeyParser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
             timeZone = java.util.TimeZone.getTimeZone("UTC")
         }

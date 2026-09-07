@@ -2152,6 +2152,7 @@
     <string name="today_score_solid">Стабильный</string>
     <string name="today_charge_carried">Заряд · %1$s</string>
     <string name="today_recovery_carried">Восстановление · %1$s</string>
+    <string name="sleep_carried_metric_caption">Перенесено · %1$s</string>
     <string name="today_show_fewer_metrics">Показать меньше</string>
     <string name="today_show_all_metrics">Показать все метрики (%1$d)</string>
     <string name="today_hr_empty_selected_day">Нет пульса за этот день. Вернитесь к дню, когда браслет был надет.</string>

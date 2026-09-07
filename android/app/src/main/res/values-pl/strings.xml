@@ -2201,6 +2201,7 @@
     <string name="today_score_solid">PEWNY</string>
     <string name="today_charge_carried">Energia · %1$s</string>
     <string name="today_recovery_carried">Regeneracja · %1$s</string>
+    <string name="sleep_carried_metric_caption">Przeniesione · %1$s</string>
     <string name="today_show_fewer_metrics">Pokaż mniej</string>
     <string name="today_show_all_metrics">Pokaż wszystkie wskaźniki (%1$d)</string>
     <string name="today_hr_empty_selected_day">Brak danych tętna dla tego dnia. Wróć do dnia, w którym opaska była noszona.</string>
