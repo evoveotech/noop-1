@@ -12,6 +12,7 @@ import androidx.glance.Image
 import androidx.glance.ColorFilter
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
+import androidx.glance.LocalGlanceId
 import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
@@ -60,16 +61,7 @@ class HrGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val snap = runCatching { WidgetSnapshotStore.load(context) }.getOrDefault(WidgetSnapshot())
-        val dark = runCatching {
-            when (context.getSharedPreferences("noop_prefs", Context.MODE_PRIVATE)
-                .getString("theme.appearance", "system")) {
-                "light" -> false
-                "dark" -> true
-                else -> (context.resources.configuration.uiMode and
-                    android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                    android.content.res.Configuration.UI_MODE_NIGHT_YES
-            }
-        }.getOrDefault(true)
+        val dark = WidgetTheme.isDark(context)
         provideContent { HrWidgetContent(snap, dark) }
     }
 
@@ -258,6 +250,8 @@ private fun HrTraceImage(
 ) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
+    // Identifies THIS placed widget, so the redundant-draw memo below cannot confuse two of them.
+    val glanceInstance = LocalGlanceId.current.toString()
     // Leave room for the scale column so the trace is not drawn under its own labels.
     val chartWidthDp = hrChartWidthDp(widthDp)
     // ONE box for both the geometry and the bitmap. Sizing them separately let the trace be drawn to
@@ -268,6 +262,9 @@ private fun HrTraceImage(
     val hPx = (HR_CHART_TARGET_DP * density).toInt().coerceAtLeast(1)
     val wPx = HrTrace.widestAtHeight((chartWidthDp * density).toInt(), hPx)
 
+    // Measured, because "the widget drains the battery" was not decidable from an export: this is the
+    // only widget that ships a BITMAP rather than a few KB of text, and nothing counted what that cost.
+    val startedNs = System.nanoTime()
     val bmp = runCatching {
         HrTraceRenderer.render(
             points = HrTrace.points(snap.hrSeries, wPx.toFloat(), hPx.toFloat()),
@@ -279,6 +276,19 @@ private fun HrTraceImage(
             strokePx = 2f * density,
         )
     }.getOrNull()
+    if (bmp != null) {
+        WidgetTelemetry.noteRender(
+            bytes = wPx * hPx * HrTrace.BYTES_PER_PIXEL,
+            elapsedMs = (System.nanoTime() - startedNs) / 1_000_000,
+        )
+        // A push carrying no live sample appends no point, so this draw reproduced the previous bitmap
+        // exactly. Counting them sizes the saving a future cache would take; nothing is skipped here.
+        // Keyed by the PLACED WIDGET, not globally: two HR widgets would otherwise answer for each
+        // other, and two of the same size would make each one's necessary draw look like a repeat.
+        if (HrTraceSeen.repeat(glanceInstance, snap.hrSeries, wPx, hPx, dark)) {
+            WidgetTelemetry.noteRedundantRender()
+        }
+    }
 
     // The chart takes the ROW's remaining width by weight rather than a width computed from
     // LocalSize. On a One UI launcher LocalSize reported a size smaller than the card actually
