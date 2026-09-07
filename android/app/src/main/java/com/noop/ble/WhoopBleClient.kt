@@ -165,10 +165,39 @@ data class LiveState(
      *  reconnects (or the settle timeout gives up). With `!connected` it drives the Devices card's
      *  transient "Reconnecting…" pill. Twin of macOS LiveState.rebootInProgress. */
     val rebootInProgress: Boolean = false,
-    /** Charging flag from BATTERY_LEVEL events — wire observation: u8 bit0 (4.0 @26 / 5.0 @30,
-     *  ~every 8 min on captured links). Flag only; battery % keeps its family source (#77).
-     *  Cleared on disconnect so a stale flag can't outlive the link. Twin of macOS
-     *  LiveState.charging. */
+    /** Charging flag. Two sources, and they mean different things (#1935).
+     *
+     *  The authority is BATTERY_LEVEL — wire observation: u8 bit0 (4.0 @26 / 5.0 @30, ~every 8 min on
+     *  captured links). That is a LEVEL signal from the strap's own gauge: every live battery event
+     *  rewrites this flag, whatever it was.
+     *
+     *  On a 5/MG it is ALSO set by BATTERY_PACK_CONNECTED(21) and cleared by BATTERY_PACK_REMOVED(22),
+     *  which is a latency win — 21 leads CHARGING_ON(7) by up to ~17 s in captures, so the pill responds
+     *  when the pack goes on. But 21 means A PACK WAS ATTACHED, not that charging began. They diverge on
+     *  a depleted pack or a poor contact: 21 fires, 7 never does, and this reads true while nothing
+     *  charges.
+     *
+     *  THAT STATE IS BOUNDED, which is why it is documented rather than split. It does not last until 22:
+     *  the next live BATTERY_LEVEL overwrites it from the strap's own GAUGE, so the window is about one
+     *  battery cadence, and the gauge always gets the last word.
+     *
+     *  THE GAUGE ONLY GETS THE LAST WORD BECAUSE NOTHING ELSE REPEATS. That is a real constraint, not an
+     *  observation (#1935): the pushed pack-info event (109) used to write charging=true too, keyed on
+     *  pack PRESENCE plus a plausible SoC, as an anti-staleness half for a missed attach edge. It repeats
+     *  every couple of minutes, so it outran the ~8 min BATTERY_LEVEL and a flat or badly seated pack read
+     *  "charging" for its whole attachment instead of self-correcting. It now writes [packSocPct] alone,
+     *  which is what the anti-staleness job actually wanted. So: an EDGE may set this flag (7, 21, 22), a
+     *  repeating presence signal must not, or the gauge stops being able to correct it.
+     *
+     *  It matters beyond the pill. [WhoopBleClient.idleThrottleActive] reads this flag and gates THREE
+     *  levers, not one: the low-battery offload cadence, the GATT connection-priority throttle, and the
+     *  continuous-capture pause behind the user's own "Pause HRV capture" percentage. So a strap on a flat
+     *  pack can skip low-battery throttling and keep background capture running after the user asked for
+     *  it to stop, for that window. [WhoopBleClient.batteryPollDue] also reads it, polling every tick
+     *  instead of every other, which is harmless and arguably wanted with a pack on.
+     *
+     *  Flag only; battery % keeps its family source (#77). Cleared on disconnect so a stale flag can't
+     *  outlive the link. Twin of macOS LiveState.charging. */
     val charging: Boolean? = null,
     /** Battery-pack charge, tenths-of-a-percent precision, from the pushed pack event (109) payload.
      *  5/MG only — a WHOOP 4.0 has no pack fuel gauge (its pack reads as a VOLTAGE via opcode 98, a
@@ -745,7 +774,14 @@ class WhoopBleClient(
          *  strap is DISCHARGING at/below [thresholdPct]. The
          *  phone's own Battery Saver deliberately does NOT trigger it — power saving is about the strap's
          *  charge, not the phone's. A charging strap never throttles. The threshold is its own hysteresis
-         *  (battery % moves slowly, so a boundary crossing flips at most once per point). */
+         *  (battery % moves slowly, so a boundary crossing flips at most once per point).
+         *
+         *  [LiveState.charging] is not purely "is charging" (#1935): on a 5/MG it is also set on pack
+         *  ATTACH, so a depleted or badly-seated pack reads true while nothing charges, and this gate then
+         *  stays off. The window is bounded — the next BATTERY_LEVEL rewrites the flag from the strap's own
+         *  gauge — and the reasoning for accepting that rather than splitting the state is on that field.
+         *  Read it before adding a trend check here: making this wait for a rising gauge would delay
+         *  throttle release on every honest attach to close an edge that already closes itself. */
         fun idleThrottleActive(batteryPct: Int, charging: Boolean, thresholdPct: Int): Boolean =
             thresholdPct > 0 && !charging && batteryPct <= thresholdPct
 
@@ -8025,11 +8061,19 @@ class WhoopBleClient(
                                     // command path and the event path end up disagreeing about the same
                                     // pack, which is the drift decodeRecord() exists to prevent.
                                     if (info.displayable && soc != null) {
-                                        // charging=true here as well as on event 21 is the anti-staleness
-                                        // half: if the attach edge was missed (app started with the pack
-                                        // already on, or the link dropped over the attach), this repeating
-                                        // event re-establishes the state within a couple of minutes.
-                                        _state.update { s -> s.copy(packSocPct = soc, charging = true) }
+                                        // SoC ONLY, deliberately (#1935). This event says a pack is
+                                        // ATTACHED and how full it is, never that current is flowing.
+                                        // It used to write charging=true as well, as the anti-staleness
+                                        // half for a missed attach edge — but it repeats every couple of
+                                        // minutes, so it outran the ~8 min BATTERY_LEVEL that corrects the
+                                        // flag from the strap's own GAUGE, and a flat or badly seated pack
+                                        // then read "charging" for the whole attachment instead of
+                                        // self-correcting. BATTERY_PACK_CONNECTED(21) still lights the pill
+                                        // on the attach edge, so the latency win survives; the gauge now
+                                        // gets the last word, which is what iOS already did. A missed
+                                        // attach edge costs at most one battery cadence of lag and is then
+                                        // RIGHT, instead of being fast and possibly wrong.
+                                        _state.update { s -> s.copy(packSocPct = soc) }
                                     } else if (!info.present) {
                                         _state.update { s -> s.copy(packSocPct = null) }
                                     }
