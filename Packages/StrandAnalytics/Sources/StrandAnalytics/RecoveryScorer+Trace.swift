@@ -11,6 +11,19 @@ import Foundation
 
 extension RecoveryScorer {
 
+    /// The trace's two-decimal rounding contract, shared by both platforms: round `x * 100` to the
+    /// nearest integer with half-ties AWAY FROM ZERO, divide by 100, and keep the IEEE sign bit — so a
+    /// driver term that rounds to zero from below still renders `-0.0`, as it does on Android (#1437).
+    ///
+    /// The rounding stays in the DOUBLE domain on purpose. Kotlin's `Math.round` returns a `Long`, which
+    /// saturates at 2^63-1, so `1e20` came back as `9.223372036854776e16` there while this side kept
+    /// `1e20` (#47). Nothing here is clamped: any finite input round-trips, and a non-finite one (or a
+    /// finite one whose `x * 100` overflows) passes through as the matching infinity or NaN. The Kotlin
+    /// twin is `RecoveryScorerTrace.r2`.
+    static func traceRound2(_ x: Double) -> Double {
+        (x * 100.0).rounded(.toNearestOrAwayFromZero) / 100.0
+    }
+
     /// Side-effect-free diagnostic twin of `recovery(...)`: returns the SAME score recovery(...) would,
     /// plus the per-term Charge breakdown trace. The four inputs (hrv / rhr / resp / sleepPerf) plus the
     /// skin-temp deviation each get a baseline line (mean / spread / nValid / status), a term line
@@ -36,9 +49,7 @@ extension RecoveryScorer {
         -> (score: Double?, trace: [String]) {
 
         // Trace numbers use nearest rounding with half-ties away from zero on both platforms.
-        func r2(_ x: Double) -> Double {
-            (x * 100.0).rounded(.toNearestOrAwayFromZero) / 100.0
-        }
+        func r2(_ x: Double) -> Double { traceRound2(x) }
 
         var lines: [String] = []
         var nilTerms: [String] = []

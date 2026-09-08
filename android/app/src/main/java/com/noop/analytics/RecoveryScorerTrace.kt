@@ -15,23 +15,35 @@ import kotlin.math.abs
 object RecoveryScorerTrace {
 
     /**
-     * Trace numbers use nearest rounding with half-ties away from zero on both platforms.
+     * Trace numbers use nearest rounding with half-ties away from zero on both platforms. Twin of the
+     * Swift RecoveryScorer.traceRound2, which is the contract this reproduces.
      *
      * Round the MAGNITUDE and reapply the sign, rather than branching on `scaled < 0.0`. Two traps sit
      * here, and Swift's `.rounded(.toNearestOrAwayFromZero)` avoids both for free:
      *
-     *  * Math.round returns a Long, which has no negative zero, so negating it before the division
-     *    collapses -0.0 to +0.0 for any value that rounds to zero;
+     *  * a Long has no negative zero, so negating a rounded Long before the division collapses -0.0 to
+     *    +0.0 for any value that rounds to zero;
      *  * `-0.0 < 0.0` is FALSE, so a sign test cannot even route an exact -0.0 to a negating branch —
      *    and -0.0 is reachable here, since a skin-temp deviation of exactly 0.0 gives z = -|dev| = -0.0.
      *
      * These values are interpolated straight into the trace, so either trap printed `z=0.0` on Android
      * against `z=-0.0` on Apple. copySign carries the IEEE sign bit itself and handles both (#1437
      * follow-up).
+     *
+     * The rounding itself stays in the DOUBLE domain, because Math.round returns a Long and therefore
+     * SATURATES: |x * 100| >= 2^63 came back as Long.MAX_VALUE, so 1e20 rendered as 9.223372036854776e16
+     * where Swift kept 1e20 (#47). rint is half-to-EVEN, so an exact tie (the fraction is exactly 0.5,
+     * only possible below 2^52, where floor is exact) is stepped up by hand to reach half-away-from-zero;
+     * `floor(m + 0.5)` is not usable for that, since m + 0.5 is itself rounded and would push
+     * 0.49999999999999994 up to 1. Nothing is clamped: any finite input round-trips, and a non-finite one
+     * (or a finite one whose x * 100 overflows) passes through as the matching infinity or NaN.
      */
-    private fun r2(x: Double): Double {
+    internal fun r2(x: Double): Double {
         val scaled = x * 100.0
-        return Math.copySign(Math.round(abs(scaled)) / 100.0, scaled)
+        val magnitude = abs(scaled)
+        val floored = Math.floor(magnitude)
+        val rounded = if (magnitude - floored == 0.5) floored + 1.0 else Math.rint(magnitude)
+        return Math.copySign(rounded / 100.0, scaled)
     }
 
     /**
