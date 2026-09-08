@@ -543,6 +543,42 @@ class LocalDayWindowsTest {
         }
     }
 
+    /**
+     * Edge coverage for the day-number to `YYYY-MM-DD` conversion, held here because issue #71 retired
+     * `TrainingLoadEngine`'s private duplicate of it in favour of this helper. Leap years (including the
+     * century rules), negative epoch days, and the round trip back to the day number are exactly what
+     * the duplicate covered, so they must keep being covered somewhere.
+     *
+     * The expected literals below are the VERBATIM stdout of the Swift twin compiled standalone
+     * (`swiftc -O twin.swift`), not values re-derived here — that is what makes this an oracle rather
+     * than a second opinion. Swift twin:
+     * `LocalDayWindowsTests.testDayNumberKeysCoverLeapYearsNegativeEpochsAndRoundTrips`.
+     */
+    @Test
+    fun dayNumberKeysCoverLeapYearsNegativeEpochsAndRoundTrips() {
+        val expected = listOf(
+            0 to "1970-01-01",
+            -1 to "1969-12-31",
+            11_016 to "2000-02-29", // 400-divisible century IS a leap year
+            19_782 to "2024-02-29",
+            -25_509 to "1900-02-28", // 100-divisible non-400 century is NOT
+            -25_508 to "1900-03-01",
+            47_540 to "2100-02-28",
+            -135_081 to "1600-02-29", // negative epoch day, leap century
+            -719_162 to "0001-01-01", // the floor the engine's day parser accepts
+            2_932_896 to "9999-12-31",
+        )
+        for ((ordinal, key) in expected) {
+            assertEquals("ordinal $ordinal", key, LocalCalendarDate(daysSinceEpoch = ordinal).key)
+        }
+        // Round trip over both signs, stepping by a prime so the sweep does not land on month starts.
+        for (ordinal in -719_162..2_932_896 step 9_973) {
+            val date = LocalCalendarDate(daysSinceEpoch = ordinal)
+            assertEquals("ordinal $ordinal", ordinal, date.daysSinceEpoch)
+            assertEquals("ordinal $ordinal", date.key, date(date.key).key)
+        }
+    }
+
     private companion object {
 
         /** The oracle file package 1 committed under the Android test resources. */

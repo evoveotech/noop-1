@@ -431,4 +431,33 @@ final class LocalDayWindowsTests: XCTestCase {
         XCTAssertTrue(blind.contains("cannot observe"))
         XCTAssertTrue(blind.contains("unavailable"))
     }
+
+    /// Edge coverage for the day-number to `YYYY-MM-DD` conversion, held here because issue #71 retired
+    /// `TrainingLoadEngine`'s private duplicate of it in favour of this helper. Leap years (including
+    /// the century rules), negative epoch days, and the round trip back to the day number are exactly
+    /// what the duplicate covered, so they must keep being covered somewhere.
+    /// Kotlin twin: `LocalDayWindowsTest.dayNumberKeysCoverLeapYearsNegativeEpochsAndRoundTrips`.
+    func testDayNumberKeysCoverLeapYearsNegativeEpochsAndRoundTrips() {
+        let expected: [(Int, String)] = [
+            (0, "1970-01-01"),
+            (-1, "1969-12-31"),
+            (11_016, "2000-02-29"),     // 400-divisible century IS a leap year
+            (19_782, "2024-02-29"),
+            (-25_509, "1900-02-28"),    // 100-divisible non-400 century is NOT
+            (-25_508, "1900-03-01"),
+            (47_540, "2100-02-28"),
+            (-135_081, "1600-02-29"),   // negative epoch day, leap century
+            (-719_162, "0001-01-01"),   // the floor the engine's day parser accepts
+            (2_932_896, "9999-12-31"),
+        ]
+        for (ordinal, key) in expected {
+            XCTAssertEqual(LocalCalendarDate(daysSinceEpoch: ordinal).key, key, "ordinal \(ordinal)")
+        }
+        // Round trip over both signs, stepping by a prime so the sweep does not land on month starts.
+        for ordinal in stride(from: -719_162, through: 2_932_896, by: 9_973) {
+            let date = LocalCalendarDate(daysSinceEpoch: ordinal)
+            XCTAssertEqual(date.daysSinceEpoch, ordinal, "ordinal \(ordinal)")
+            XCTAssertEqual(self.date(date.key).key, date.key, "ordinal \(ordinal)")
+        }
+    }
 }
