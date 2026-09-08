@@ -1,6 +1,7 @@
 package com.noop.ble
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.noop.data.DynAccelDiag
 import com.noop.data.InsertCounts
 import com.noop.data.StreamBatch
@@ -15,6 +16,7 @@ import com.noop.protocol.decodeHistorical
 import com.noop.protocol.extractHistoricalStreams
 import com.noop.protocol.isEmptyRecordFrame
 import com.noop.protocol.rejectedHistoricalRecords
+import java.io.IOException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -934,13 +936,22 @@ interface TrimCursorStore {
 }
 
 /** Default [TrimCursorStore] backed by a private SharedPreferences file. */
-class PrefsTrimCursorStore(context: Context) : TrimCursorStore {
-    private val prefs = context.applicationContext
-        .getSharedPreferences("noop_backfill_cursors", Context.MODE_PRIVATE)
+class PrefsTrimCursorStore(private val prefs: SharedPreferences) : TrimCursorStore {
+
+    /** Production entry point: the app's private cursor prefs file. */
+    constructor(context: Context) : this(
+        context.applicationContext.getSharedPreferences("noop_backfill_cursors", Context.MODE_PRIVATE),
+    )
 
     override suspend fun set(name: String, value: Long) {
         // commit() (synchronous) so durability is established before we ack the strap.
-        prefs.edit().putLong(name, value).commit()
+        // #8: commit() reports a FAILED write (full storage, unwritable prefs file) by RETURNING
+        // false — it does not throw. Discarding that result made a failed persist look identical to
+        // a successful one, so the caller's try/catch never fired and the strap got acked without a
+        // durable cursor. Surface it as the throw that guard already handles by HOLDING the ack.
+        if (!prefs.edit().putLong(name, value).commit()) {
+            throw IOException("SharedPreferences.commit() returned false for cursor '$name'=$value")
+        }
     }
 
     override suspend fun get(name: String): Long? =
