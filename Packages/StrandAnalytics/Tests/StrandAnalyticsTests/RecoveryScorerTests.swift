@@ -275,4 +275,70 @@ final class RecoveryScorerTests: XCTestCase {
         XCTAssertEqual(neither, baselineOnly, accuracy: 1e-9, "a baseline with no value must drop the term")
         XCTAssertNotEqual(both, neither, "supplying BOTH must actually change the score")
     }
+
+    // MARK: - Required HRV baseline on the raw DriverBaseline overload (#40)
+
+    func testRawOverloadRefusesToScoreWithoutHRVBaseline() {
+        // The raw overload documents hrvBaseline as REQUIRED, but it is Optional and the
+        // cold-start gate only consults hrvBaselineUsable (default true). Without this guard any
+        // other optional term alone produced a Charge score carrying NO HRV term at all. Each
+        // case below supplies exactly one optional driver with the HRV baseline absent.
+        let rhrB = RecoveryScorer.DriverBaseline(mean: 55, spread: 3 / 1.253)
+        let respB = RecoveryScorer.DriverBaseline(mean: 14.5, spread: 1 / 1.253)
+        let effortB = RecoveryScorer.DriverBaseline(mean: 40, spread: 15 / 1.253)
+
+        // The issue's minimal reproduction: sleepPerf as the only weighted term.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: nil,
+            hrvBaseline: nil, rhrBaseline: nil, respBaseline: nil,
+            sleepPerf: 0.85))
+        // RHR term alone.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: nil,
+            hrvBaseline: nil, rhrBaseline: rhrB, respBaseline: nil,
+            sleepPerf: nil))
+        // Resp term alone.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: 14.0,
+            hrvBaseline: nil, rhrBaseline: nil, respBaseline: respB,
+            sleepPerf: nil))
+        // Skin-temp term alone.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: nil,
+            hrvBaseline: nil, rhrBaseline: nil, respBaseline: nil,
+            sleepPerf: nil, skinTempDev: 0.4))
+        // Recovery-Index term alone.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: nil,
+            hrvBaseline: nil, rhrBaseline: nil, respBaseline: nil,
+            sleepPerf: nil, recoveryIndexSlope: -1.0))
+        // Activity-Balance term alone.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: nil,
+            hrvBaseline: nil, rhrBaseline: nil, respBaseline: nil,
+            sleepPerf: nil, effortBaseline: effortB, priorDayEffort: 80.0))
+        // Every optional driver at once still cannot substitute for the required HRV baseline.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: 14.0,
+            hrvBaseline: nil, rhrBaseline: rhrB, respBaseline: respB,
+            sleepPerf: 0.85, skinTempDev: 0.4, recoveryIndexSlope: -1.0,
+            effortBaseline: effortB, priorDayEffort: 80.0))
+    }
+
+    func testRawOverloadPreservesColdStartAndValidScores() {
+        let hrvB = RecoveryScorer.DriverBaseline(mean: 50, spread: 6 / 1.253)
+        // Cold start unchanged: baseline PRESENT but not usable → nil, as before.
+        XCTAssertNil(RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: nil,
+            hrvBaseline: hrvB, rhrBaseline: nil, respBaseline: nil,
+            sleepPerf: 0.85, hrvBaselineUsable: false))
+        // A present, usable baseline scores exactly as before. Expected literal from the
+        // standalone Swift oracle whose source is kept in the Kotlin twin's comment
+        // (RecoveryRequiredHrvBaselineTest.kt) — the same literal both sides pin.
+        let scored = RecoveryScorer.recovery(
+            hrv: 50, rhr: 60, resp: nil,
+            hrvBaseline: hrvB, rhrBaseline: nil, respBaseline: nil,
+            sleepPerf: 0.85)
+        XCTAssertEqual(scored!, 57.932425214874954, accuracy: 1e-12)
+    }
 }

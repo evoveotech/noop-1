@@ -292,7 +292,7 @@ object RecoveryScorer {
      * @param rhr tonight's resting HR (bpm).
      * @param resp tonight's respiration (raw or calibrated — z is scale-invariant);
      *   null drops the term.
-     * @param hrvBaseline HRV baseline (required for a score).
+     * @param hrvBaseline HRV baseline (required for a score — null returns null).
      * @param rhrBaseline resting-HR baseline; null drops the RHR term. On the BaselineState overload an
      *   UNUSABLE baseline (#1988) is treated as null, so a synthetic cold-start midpoint never scores.
      * @param respBaseline respiration baseline; null drops the resp term.
@@ -335,6 +335,11 @@ object RecoveryScorer {
         // Cold-start gate: HRV is the dominant driver; if its baseline isn't
         // usable, refuse to score (more honest than a fabricated value).
         if (!hrvBaselineUsable) return null
+        // Required-driver gate: the HRV baseline is REQUIRED for a score. It is nullable here only
+        // for callers that may not have one yet, and hrvBaselineUsable defaults to true, so without
+        // this an absent baseline let any other optional term (sleepPerf alone, say) produce a
+        // Charge score carrying no HRV term at all.
+        val hrvB = hrvBaseline ?: return null
 
         val terms = ArrayList<Pair<Double, Double>>() // (z, weight)
 
@@ -345,9 +350,7 @@ object RecoveryScorer {
         // signature is still detected and reported out-of-band (Charge trace + RecoveryDrivers verdict)
         // so real firings can be counted first. See the header above for why, and swap in
         // parasympatheticSaturation(hrvZ, rhrZ).easedHrvZ here to enable it.
-        hrvBaseline?.let { b ->
-            terms.add(zScore(hrv, b.mean, b.spread) to wHRV)
-        }
+        terms.add(zScore(hrv, hrvB.mean, hrvB.spread) to wHRV)
         // RHR term: lower is better → (μ − x) / σ.
         rhrBaseline?.let { b ->
             terms.add(zScore(b.mean, rhr, b.spread) to wRHR)

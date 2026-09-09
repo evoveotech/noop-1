@@ -289,7 +289,7 @@ public enum RecoveryScorer {
     ///   - rhr: tonight's resting HR (bpm).
     ///   - resp: tonight's respiration (raw or calibrated — z is scale-invariant);
     ///           nil drops the term.
-    ///   - hrvBaseline: HRV baseline (required for a score).
+    ///   - hrvBaseline: HRV baseline (required for a score — nil returns nil).
     ///   - rhrBaseline: resting-HR baseline; nil drops the RHR term. On the `BaselineState` overload an
     ///     UNUSABLE baseline (#1988) is treated as nil, so a synthetic cold-start midpoint never scores.
     ///   - respBaseline: respiration baseline; nil drops the resp term.
@@ -328,6 +328,11 @@ public enum RecoveryScorer {
         // Cold-start gate: HRV is the dominant driver; if its baseline isn't
         // usable, refuse to score (more honest than a fabricated value).
         if !hrvBaselineUsable { return nil }
+        // Required-driver gate: the HRV baseline is REQUIRED for a score. It is Optional here only
+        // for callers that may not have one yet, and hrvBaselineUsable defaults to true, so without
+        // this an absent baseline let any other optional term (sleepPerf alone, say) produce a
+        // Charge score carrying no HRV term at all.
+        guard let hrvB = hrvBaseline else { return nil }
 
         var terms: [(z: Double, w: Double)] = []
 
@@ -338,9 +343,7 @@ public enum RecoveryScorer {
         // signature is still detected and reported out-of-band (Charge trace + ChargeDrivers verdict)
         // so real firings can be counted first. See the MARK header for why, and swap in
         // `parasympatheticSaturation(hrvZ:rhrZ:).easedHrvZ` here to enable it.
-        if let b = hrvBaseline {
-            terms.append((zScore(hrv, mean: b.mean, spread: b.spread), wHRV))
-        }
+        terms.append((zScore(hrv, mean: hrvB.mean, spread: hrvB.spread), wHRV))
         // RHR term: lower is better → (μ − x) / σ.
         if let b = rhrBaseline {
             terms.append((zScore(b.mean, mean: rhr, spread: b.spread), wRHR))
