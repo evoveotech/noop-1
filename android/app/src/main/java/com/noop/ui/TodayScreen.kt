@@ -2743,6 +2743,13 @@ private fun ScoreHeroRow(
                             R.string.today_action_open_detail,
                             uiString(R.string.today_metric_rest),
                         ),
+                        // #1164/#2012: the provisional state is now said BESIDE the number instead of
+                        // replacing it. See [HeroRingColumn]'s caption for why.
+                        caption = if (restPendingSync) {
+                            uiString(R.string.l10n_today_screen_pending_sync_cbe01f9e)
+                        } else {
+                            null
+                        },
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             HeroScoreVessel(
@@ -2751,15 +2758,10 @@ private fun ScoreHeroRow(
                                 tint = Palette.recoveryColor(restScore ?: 0.0),
                                 diameter = ring,
                                 animated = animated,
-                                showsValue = restScore != null && !restPendingSync,
+                                showsValue = restScore != null,
                                 onTap = restRingTap,
                             )
-                            // #1164: when today's Rest is provisional (strap has banked records not yet
-                            // offloaded), show "Pending sync" instead of a number that will change once the
-                            // full night lands. Past days are final (no more data coming). Mirrors iOS restRing.
-                            if (restPendingSync) {
-                                RingPendingSync()
-                            } else if (restScore == null) {
+                            if (restScore == null) {
                                 // #898: an aggregate-import user (a daily HRV/RHR import, no in-bed session) gets a
                                 // Charge from WatchRecovery but NO sleep_performance, so Rest used to read a bare
                                 // "No Data" next to a lit Charge , reading as broken. When a Charge IS present for the
@@ -2816,6 +2818,14 @@ private fun HeroRingColumn(
     // Charge's ring opens a breakdown, so "see what shaped" is honest there. Effort and Rest open a
     // trend detail instead, so they override it rather than announce a breakdown they do not show.
     ringTapLabel: String? = null,
+    // #2012: an optional one-line note under the domain label — currently Rest's "Pending sync".
+    //
+    // It lives HERE, under the label, rather than over the ring, for two reasons. It cannot cover the
+    // score, which is what made the old overlay hide a number the user had every right to see. And it is
+    // laid out at the COLUMN's width rather than the vessel's, so it has room to render: the overlay was
+    // measured against the circle and ellipsised its own explanation mid-word ("strap history still o...")
+    // while spilling past the vessel's edge.
+    caption: String? = null,
     ring: @Composable () -> Unit,
 ) {
     val domainLabel = uiString(
@@ -2890,6 +2900,22 @@ private fun HeroRingColumn(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .size(Metrics.space14),
+            )
+        }
+        if (caption != null) {
+            // A plain wrapping Text, NOT AutoSizeValue: that one is maxLines = 1 with softWrap off and an
+            // ellipsis, so a longer translation would shrink to its floor and then cut itself off
+            // mid-word. Truncating its own explanation is precisely what the old in-ring overlay did and
+            // what moving the caption out here was meant to stop, so it must not come back through the
+            // component. Two lines at the column's width holds every locale we ship.
+            Text(
+                text = caption,
+                style = NoopType.footnote,
+                color = Palette.textTertiary,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Metrics.space2),
             )
         }
     }
@@ -3221,23 +3247,6 @@ private fun RingNeedsTrackedNight() {
 /** #1164: the Rest ring's overlay when today's score is provisional because the strap still has banked
  *  records not yet offloaded. Shows "Pending sync" instead of a number that will change once the full
  *  night lands and `analyzeRecent` re-scores it. Mirrors iOS ringPendingSync. */
-@Composable
-private fun RingPendingSync() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        AutoSizeValue(
-            uiString(R.string.l10n_today_screen_pending_sync_cbe01f9e),
-            style = NoopType.headline,
-            color = Palette.textTertiary,
-            minScale = 0.7f,
-        )
-        AutoSizeValue(
-            uiString(R.string.l10n_today_screen_strap_history_still_offloading_80140264),
-            style = NoopType.footnote,
-            color = Palette.textSecondary,
-        )
-    }
-}
-
 // MARK: - Hero vitals metric rows, HRV / Resting HR / Respiratory, re-homed below the ring hero
 //
 // The WHOOP-style redesign (#23) dropped the big gold RecoveryRing hero that used to carry these; the
@@ -5412,14 +5421,24 @@ private fun MetricGrid(
         ),
         KeyMetric.REST to KeyTileData(
             label = uiString(R.string.l10n_today_screen_rest_b79e5f48),
-            // #1164: when today's Rest is provisional, show "—" with a "Pending sync" caption instead of
-            // a number that will change once the full night lands. Past days are final.
-            value = if (restPendingSync) NO_DATA else restScore?.let { "${it.roundToInt()}" } ?: NO_DATA,
-            unit = if (!restPendingSync && restScore != null) "%" else "",
+            // #1164/#2012: a provisional Rest is now SAID to be provisional rather than withheld. The
+            // caption below carries that; blanking the number as well left a user who had slept, and
+            // whose score was computed, looking at "—" for as long as the strap had anything left to
+            // send — which on a continuously-banking strap is most of the day.
+            value = restScore?.let { "${it.roundToInt()}" } ?: NO_DATA,
+            unit = if (restScore != null) "%" else "",
             tint = restScore?.let { Palette.recoveryColor(it) } ?: Palette.restColor,
             frac = restScore?.let { (it / 100.0).coerceIn(0.0, 1.0) },
             spark = restSpark,
-            caption = if (restPendingSync) uiString(R.string.l10n_today_screen_strap_history_still_offloading_80140264) else null,
+            // Composed from the two shipped strings rather than a third one needing four translations.
+            // Matches the single iOS caption "Pending sync · strap history still offloading": the second
+            // half alone read as a fragment, and more so now that a real number sits above it (#2012).
+            caption = if (restPendingSync) {
+                uiString(R.string.l10n_today_screen_pending_sync_cbe01f9e) + " · " +
+                    uiString(R.string.l10n_today_screen_strap_history_still_offloading_80140264)
+            } else {
+                null
+            },
         ),
         KeyMetric.HRV to run {
             val v = d?.avgHrv ?: carriedDay?.avgHrv

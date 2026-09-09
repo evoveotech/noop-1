@@ -733,10 +733,14 @@ struct TodayView: View {
         return lastValue
     }
 
-    /// #1164 — should today's Rest show "Pending sync" instead of a provisional number? When the strap has
-    /// banked records not yet offloaded, the Rest score is computed from partial data and will change once
-    /// the full night lands and `analyzeRecent` re-scores it. Surfacing it as "Pending sync" rather than a
-    /// confident number that then moves reads honestly instead of as a bug.
+    /// #1164/#2012 — should today's Rest be MARKED provisional? When the strap has banked records not yet
+    /// offloaded, the Rest score is computed from partial data and may change once the full night lands and
+    /// `analyzeRecent` re-scores it. Saying so reads honestly instead of as a bug when the number moves.
+    ///
+    /// True means "caption it as pending", NOT "hide it". #2012: the number used to be withheld on both
+    /// surfaces while this was true, so a user whose night was scored saw nothing for as long as the strap
+    /// had anything left to send, which on a continuously banking strap is most of the day. A number that
+    /// may still move is not the same as no number, and it is the one the screen exists to show.
     ///
     /// Two honest signals, either of which means more data is expected:
     /// - `backfilling`: an offload is actively running right now (data is draining).
@@ -745,8 +749,8 @@ struct TodayView: View {
     ///   before the first offload starts).
     ///
     /// Only applies to TODAY (a past day's score is final — no more data is coming for it) and only when a
-    /// Rest score EXISTS (pending suppresses a provisional number; it does not fabricate one when there is
-    /// none). Pure + unit-testable. Mirror EXACTLY in Kotlin.
+    /// Rest score EXISTS (pending annotates a score; it never fabricates one where there is none). Pure +
+    /// unit-testable. Mirror EXACTLY in Kotlin.
     static func restPendingSync(restScore: Double?, backfilling: Bool,
                                 historyPendingSync: Bool, isTodaySelected: Bool) -> Bool {
         guard isTodaySelected, restScore != nil else { return false }
@@ -3151,7 +3155,9 @@ struct TodayView: View {
                 chargeRing(score: score, d: d, diameter: ring)
             }
             heroRingColumn(section: .effort, domain: .effort) { effortRing(d: d, diameter: ring) }
-            heroRingColumn(section: .rest, domain: .rest, provenanceKey: "sleep_performance") { restRing(diameter: ring) }
+            heroRingColumn(section: .rest, domain: .rest, provenanceKey: "sleep_performance",
+                           caption: restIsPendingSync ? "Pending sync" : nil,
+                           captionWidth: ring) { restRing(diameter: ring) }
         }
         .frame(maxWidth: .infinity, alignment: .center)
         // Zero-impact width reader: a clear background that publishes the row's width up via preference. It
@@ -3195,9 +3201,17 @@ struct TodayView: View {
     /// intrinsically diameter×diameter, so the column just centres it and stretches to an equal share
     /// of the row width.
     @ViewBuilder
+    /// `caption` is an optional one-line note under the domain label — currently Rest's "Pending sync".
+    ///
+    /// It lives HERE, under the label, rather than over the ring, for two reasons. It cannot cover the
+    /// score, which is what made the old overlay hide a number the user had every right to see. And it is
+    /// laid out at the COLUMN's width rather than the ring's, so it has room to render: the overlay was
+    /// measured against the circle and ellipsised its own explanation mid-word while spilling past the
+    /// ring's edge. Mirrors Android's `HeroRingColumn(caption:)`.
     private func heroRingColumn<RingBody: View>(
         section: ScoreSection, domain: DomainTheme, provenanceKey: String? = nil,
-        onRingTap: (() -> Void)? = nil,
+        onRingTap: (() -> Void)? = nil, caption: String? = nil,
+        captionWidth: CGFloat = 98,
         @ViewBuilder ring: () -> RingBody
     ) -> some View {
         VStack(spacing: 8) {
@@ -3270,6 +3284,24 @@ struct TodayView: View {
                         .accessibilityLabel("Source: \(label)")
                 }
             }
+            // LAST in the column, below the provenance badge rather than above it. The badges sit at the
+            // same height across the three columns and a caption on one of them must not push that
+            // column's badge a line lower than its neighbours'. The row is top-aligned and self-sizing
+            // (#762), so a caption grows the row and leaves every ring where it was.
+            if let caption {
+                // Bounded to the RING's width, not left to size itself. Unlike Android, whose three hero
+                // columns are laid out at a fixed `col` width, these columns take the width of what is in
+                // them — so an unbounded caption would widen this one on a longer translation and tip the
+                // trio off centre. Two lines at the ring's width fits the longest of them; the shrink is
+                // the same allowance the domain label above it already uses.
+                Text(caption)
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: captionWidth)
+            }
         }
     }
 
@@ -3316,17 +3348,22 @@ struct TodayView: View {
         }
     }
 
+    /// Whether today's Rest is provisional because the strap still has records to send. Resolved once and
+    /// read by both surfaces that say so — the hero column's caption and the Rest tile's — so the two can
+    /// never disagree about the same moment.
+    private var restIsPendingSync: Bool {
+        Self.restPendingSync(restScore: restScore, backfilling: liveBackfillingFlag,
+                             historyPendingSync: liveHistoryPendingSyncFlag,
+                             isTodaySelected: selectedDayOffset == 0)
+    }
+
     /// Rest (sleep composite 0–100) hero ring.
     @ViewBuilder
     private func restRing(diameter: CGFloat) -> some View {
-        // #1164: when the strap has banked records not yet offloaded, today's Rest is provisional — it
-        // will change once the full night lands and `analyzeRecent` re-scores it. Show "Pending sync"
-        // instead of a confident number that then moves. Past days are final (no more data coming).
-        if Self.restPendingSync(restScore: restScore, backfilling: liveBackfillingFlag,
-                                historyPendingSync: liveHistoryPendingSyncFlag,
-                                isTodaySelected: selectedDayOffset == 0) {
-            emptyHeroRing(diameter: diameter) { ringPendingSync() }
-        } else if let s = restScore {
+        // #1164/#2012: when the strap has banked records not yet offloaded, today's Rest is provisional —
+        // it may change once the full night lands and `analyzeRecent` re-scores it. That is now SAID, in
+        // the column's caption, rather than shown by withholding the number. Past days are final.
+        if let s = restScore {
             GlowRing(fraction: s / 100, value: s, format: { "\(Int($0.rounded()))" },
                      color: StrandPalette.restColor, diameter: diameter, lineWidth: diameter * 0.10)
         } else if displayDay?.recovery != nil {
@@ -3350,20 +3387,6 @@ struct TodayView: View {
             Text("Calibrating").font(StrandFont.headline).foregroundStyle(StrandPalette.textTertiary)
                 .lineLimit(1).minimumScaleFactor(0.7).fixedSize()
             Text("needs a tracked night").font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
-                .lineLimit(1).minimumScaleFactor(0.6).fixedSize()
-        }
-    }
-
-    /// #1164: the Rest ring's overlay when today's score is provisional because the strap still has
-    /// banked records not yet offloaded. Shows "Pending sync" instead of a number that will change once
-    /// the full night lands and `analyzeRecent` re-scores it. Mirrors Android's RingPendingSync.
-    @ViewBuilder
-    private func ringPendingSync() -> some View {
-        VStack(spacing: 3) {
-            Text("Pending sync").font(StrandFont.headline).foregroundStyle(StrandPalette.textTertiary)
-                .lineLimit(1).minimumScaleFactor(0.7).fixedSize()
-            Text("strap history still offloading").font(StrandFont.footnote)
-                .foregroundStyle(StrandPalette.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.6).fixedSize()
         }
     }
@@ -3838,40 +3861,30 @@ struct TodayView: View {
                 accessory: { scoreInfoButton(.effort) }
             )
         case .rest:
-            // #1164: when today's Rest is provisional (strap has banked records not yet offloaded), show
-            // "Pending sync" instead of a number that will change once the full night lands. Past days
-            // are final (no more data coming), so the pending state is today-only.
-            if Self.restPendingSync(restScore: restScore, backfilling: liveBackfillingFlag,
-                                     historyPendingSync: liveHistoryPendingSyncFlag,
-                                     isTodaySelected: selectedDayOffset == 0) {
-                StatTile(
-                    label: "Rest",
-                    value: "—",
-                    caption: String(localized: "Pending sync · strap history still offloading"),
-                    accent: StrandPalette.textPrimary,
-                    sparkline: sparks["sleep_performance"],
-                    sparkColor: StrandPalette.metricPurple,
-                    accessory: { scoreInfoButton(.rest) }
-                )
-            } else {
-                // Unscored TODAY → "building, wear it tonight" instead of a lone ", " caption (#527);
-                // a scored day keeps its sleep-duration / efficiency caption.
-                StatTile(
-                    label: "Rest",
-                    value: restScore.map { "\(Int($0.rounded()))%" } ?? "—",
-                    // Component 2: a scored day shows its duration/efficiency caption; an unscored TODAY shows
-                    // the "building" hint; a past day with no Rest falls to the honest "Needs the strap" rather
-                    // than a bare blank, so the tile always carries a state.
-                    caption: restScore != nil ? restCaption(d)
-                        : (buildingHint(.rest) ?? restCaption(d) ?? Self.needsStrapCaption),
-                    accent: restScore.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textPrimary,
-                    // The Rest composite (0–100) trend, not raw sleep minutes, tracks the score above (#614).
-                    sparkline: sparks["sleep_performance"],
-                    sparkColor: StrandPalette.metricPurple,
-                    // Inline ⓘ in the tile header (not a corner overlay) so it never sits over the value (#495).
-                    accessory: { scoreInfoButton(.rest) }
-                )
-            }
+            // #1164/#2012: a provisional Rest is SAID to be provisional, in the caption, rather than
+            // withheld. Blanking the number too left a user who had slept, and whose score was computed,
+            // looking at "—" for as long as the strap had anything left to send, which on a continuously
+            // banking strap is most of the day. Past days are final, so the state is today-only.
+            //
+            // Unscored TODAY → "building, wear it tonight" instead of a lone caption (#527); a scored day
+            // keeps its sleep-duration / efficiency caption.
+            StatTile(
+                label: "Rest",
+                value: restScore.map { "\(Int($0.rounded()))%" } ?? "—",
+                // Component 2: a scored day shows its duration/efficiency caption; an unscored TODAY shows
+                // the "building" hint; a past day with no Rest falls to the honest "Needs the strap" rather
+                // than a bare blank, so the tile always carries a state.
+                caption: restIsPendingSync
+                    ? String(localized: "Pending sync · strap history still offloading")
+                    : (restScore != nil ? restCaption(d)
+                        : (buildingHint(.rest) ?? restCaption(d) ?? Self.needsStrapCaption)),
+                accent: restScore.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textPrimary,
+                // The Rest composite (0–100) trend, not raw sleep minutes, tracks the score above (#614).
+                sparkline: sparks["sleep_performance"],
+                sparkColor: StrandPalette.metricPurple,
+                // Inline ⓘ in the tile header (not a corner overlay) so it never sits over the value (#495).
+                accessory: { scoreInfoButton(.rest) }
+            )
         case .hrv:
             // Carry the last scored night's HRV at the rollover (#543), today's wins, the carried value
             // is stamped "Last night · <date>", and a never-scored metric still shows ", ".
