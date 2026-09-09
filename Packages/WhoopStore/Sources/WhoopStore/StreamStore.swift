@@ -360,12 +360,13 @@ extension WhoopStore {
             // `packPpgSamples`) rather than 24 scalar rows, so this insert is O(records), not O(samples).
             if !streams.ppgWaveform.isEmpty {
                 let stmt = try db.cachedStatement(sql: """
-                    INSERT INTO ppgWaveformSample (deviceId, ts, samples, burstIndex) VALUES (?, ?, ?, ?)
+                    INSERT INTO ppgWaveformSample (deviceId, ts, samples, burstIndex, baseCode)
+                    VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(deviceId, ts) DO NOTHING
                     """)
                 for s in streams.ppgWaveform {
                     try stmt.execute(arguments: [deviceId, s.ts, WhoopStore.packPpgSamples(s.samples),
-                                                 s.burstIndex])
+                                                 s.burstIndex, s.baseCode])
                     ppgWaveformWritten += 1
                 }
             }
@@ -690,13 +691,18 @@ extension WhoopStore {
         -> [PpgWaveformSample] {
         try syncRead { db in
             try Row.fetchAll(db, sql: """
-                SELECT ts, samples, burstIndex FROM ppgWaveformSample
+                SELECT ts, samples, burstIndex, baseCode FROM ppgWaveformSample
                 WHERE deviceId = ? AND ts >= ? AND ts <= ?
                 ORDER BY ts LIMIT ?
                 """, arguments: [deviceId, from, to, limit])
+                // #2019: baseCode is SELECTed explicitly. This projection names its columns, so a new one
+                // is invisible to it until it is listed — the write would have banked the base and every
+                // read would have handed back nil, which is the same answer a legacy row gives and would
+                // have looked like the column doing nothing.
                 .map { PpgWaveformSample(ts: $0["ts"],
                                          samples: WhoopStore.unpackPpgSamples($0["samples"]),
-                                         burstIndex: $0["burstIndex"]) }
+                                         burstIndex: $0["burstIndex"],
+                                         baseCode: $0["baseCode"]) }
         }
     }
 
