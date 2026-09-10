@@ -60,6 +60,14 @@ extension WidgetSnapshot {
             }
             return "\(Int(stored.rounded()))"
         }
+        // #2040: today's stress curve. Self-gating on a cheap heart-rate fingerprint, so a publish that
+        // changed nothing costs one indexed COUNT and no rows. Only the FULL path scores it; the live
+        // fast path below reuses the previous snapshot and so carries the curve forward untouched.
+        let stress = await StressWidgetCurve.today(repo: model.repo)
+        // Loaded ONCE for the carry-forward below. Reaching for `load()` in each of the two arguments
+        // would decode the App Group blob twice on any publish that could not score, and this file
+        // already went to the trouble of removing one such decode from the live path.
+        let storedStress: WidgetSnapshot? = stress == nil ? load() : nil
         let snap = WidgetSnapshot(
             recovery: day?.recovery.map { Int($0.rounded()) },
             bpm: model.bpm ?? model.live.heartRate,
@@ -72,7 +80,11 @@ extension WidgetSnapshot {
             hrv: day?.avgHrv.map { Int($0.rounded()) },
             restingHr: day?.restingHr,
             effortDisplay: effortDisplay,
-            effortWhoop: effortScale == .whoop
+            effortWhoop: effortScale == .whoop,
+            // nil when the curve could not be scored at all, which must not blank a widget that already
+            // has one: carry the stored values forward instead of publishing an absence.
+            stressSeries: stress?.points ?? storedStress?.stressSeries,
+            stressDay: stress?.day ?? storedStress?.stressDay
         )
         saveAndReloadIfChanged(snap)
     }
