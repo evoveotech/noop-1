@@ -30049,7 +30049,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Armiert den Riemen, um zu deiner Weckzeit zu summen, auch wenn NOOP geschlossen ist. Sendet den genauen Alarmbefehl, den die offizielle App sendet, bestätigtes Summen auf einem echten WHOOP 4.0 (Community-Wire-Capture + On-Device-Test, #535). Halte einen Backup-Alarm für alles, was du wirklich nicht verpassen kannst."
+            "value": "Armiert den Riemen, um zu deiner Weckzeit zu summen, auch wenn MOVA geschlossen ist. Sendet den genauen Alarmbefehl, den die offizielle App sendet, bestätigtes Summen auf einem echten WHOOP 4.0 (Community-Wire-Capture + On-Device-Test, #535). Halte einen Backup-Alarm für alles, was du wirklich nicht verpassen kannst."
           }
         },
         "es": {
@@ -80692,7 +80692,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wie man das liest: HRV, Ruhe HR, Schlafdauer, Atemfrequenz und Hauttemperatur werden vom Band gemessen (Hauttemperatur wird als Abweichung von der eigenen Baseline angezeigt). Workouts ist die Anzahl der Aktivitäten, die du protokolliert hast oder die erkannt wurden. Recovery, Strain und Stress sind die eigenen On-Device-Scores von NOOP, keine klinischen Maßnahmen: Erholung ist eine tägliche Bereitschaft Komposit (HRV, Ruhe HR, Schlaf und Haut-Temper-Trend), Strain ist Herz-Kreislauf-Last von der Herzfrequenz abgeleitet, und Stress ist ein 0-3 autonome Last-Index von Ruhe HR und HRV."
+            "value": "Wie man das liest: HRV, Ruhe HR, Schlafdauer, Atemfrequenz und Hauttemperatur werden vom Band gemessen (Hauttemperatur wird als Abweichung von der eigenen Baseline angezeigt). Workouts ist die Anzahl der Aktivitäten, die du protokolliert hast oder die erkannt wurden. Recovery, Strain und Stress sind die eigenen On-Device-Scores von MOVA, keine klinischen Maßnahmen: Erholung ist eine tägliche Bereitschaft Komposit (HRV, Ruhe HR, Schlaf und Haut-Temper-Trend), Strain ist Herz-Kreislauf-Last von der Herzfrequenz abgeleitet, und Stress ist ein 0-3 autonome Last-Index von Ruhe HR und HRV."
           }
         },
         "es": {
@@ -101473,7 +101473,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "NOOP bietet dir drei tägliche Werte (Charge, Effort und Rest), jede auf einer 0-100-Skala. Sie werden aus den rohen Signalen deines Gurts mit veröffentlichten, von Experten begutachteten Sportwissenschaften aufgebaut und vollständig auf deinem Gerät berechnet. Sie sind NICHT die Ergebnisse von WHOOP: Wir haben keine privaten Algorithmen von WHOOP und tun nicht so, als ob. Sie zielen auf die gleichen drei Fragen mit Open Science, so dass sie normalerweise WHOOP in Richtung verfolgen, aber nicht mit Zahl für Zahl übereinstimmen. Und darum geht es."
+            "value": "MOVA bietet dir drei tägliche Werte (Charge, Effort und Rest), jede auf einer 0-100-Skala. Sie werden aus den rohen Signalen deines Gurts mit veröffentlichten, von Experten begutachteten Sportwissenschaften aufgebaut und vollständig auf deinem Gerät berechnet. Sie sind NICHT die Ergebnisse von WHOOP: Wir haben keine privaten Algorithmen von WHOOP und tun nicht so, als ob. Sie zielen auf die gleichen drei Fragen mit Open Science, so dass sie normalerweise WHOOP in Richtung verfolgen, aber nicht mit Zahl für Zahl übereinstimmen. Und darum geht es."
           }
         },
         "es": {
@@ -126200,7 +126200,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lies deine Herzfrequenz, HRV, Blutsauerstoff, Atemfrequenz, Schlaf, Schritte und Energie direkt von Apple Health und schreibe NOOP's Banddaten zurück: Schlafe mit vollen Stadien, kontinuierlicher Herzfrequenz, Workouts und nächtlichen Vitalen. Alles bleibt auf %1$@."
+            "value": "Lies deine Herzfrequenz, HRV, Blutsauerstoff, Atemfrequenz, Schlaf, Schritte und Energie direkt von Apple Health und schreibe MOVA's Banddaten zurück: Schlafe mit vollen Stadien, kontinuierlicher Herzfrequenz, Workouts und nächtlichen Vitalen. Alles bleibt auf %1$@."
           }
         },
         "es": {
@@ -157969,7 +157969,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deshalb beginnt eine Watch-Only-Energie mit \"Kalibrieren\". NOOP benötigt etwa sieben Nächte deiner HRV, um zu erfahren, wie normal für dich aussieht. Bis es sie hat, hält es die Punktzahl zurück, anstatt zu erraten. Sobald die Basislinie festgelegt ist, erscheint deine Energie mit ihrem Vertrauen auf der gleichen 0-100-Skala wie ein Gurt."
+            "value": "Deshalb beginnt eine Watch-Only-Energie mit \"Kalibrieren\". MOVA benötigt etwa sieben Nächte deiner HRV, um zu erfahren, wie normal für dich aussieht. Bis es sie hat, hält es die Punktzahl zurück, anstatt zu erraten. Sobald die Basislinie festgelegt ist, erscheint deine Energie mit ihrem Vertrauen auf der gleichen 0-100-Skala wie ein Gurt."
           }
         },
         "es": {
@@ -159063,7 +159063,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der Riemen meldet eine andere Zeit als NOOP sendet, so dass sein Firmware-Alarm nicht zu deiner Weckzeit feuert - normalerweise ein Riemen, dessen Uhr oder Alarm zurückgesetzt wurde. Setze den Riemen in der offiziellen WHOOP-App zurück (oder lade ihn vollständig auf und verbinde ihn wieder), und halte den Uhralarm deines Telefons solange wach, bis es dauert."
+            "value": "Der Riemen meldet eine andere Zeit als MOVA sendet, so dass sein Firmware-Alarm nicht zu deiner Weckzeit feuert - normalerweise ein Riemen, dessen Uhr oder Alarm zurückgesetzt wurde. Setze den Riemen in der offiziellen WHOOP-App zurück (oder lade ihn vollständig auf und verbinde ihn wieder), und halte den Uhralarm deines Telefons solange wach, bis es dauert."
           }
         },
         "es": {
@@ -166280,7 +166280,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Schalte Benachrichtigungen für NOOP in den Einstellungen ein, um deine Winddown-Erinnerung zu erhalten."
+            "value": "Schalte Benachrichtigungen für MOVA in den Einstellungen ein, um deine Winddown-Erinnerung zu erhalten."
           }
         },
         "es": {
@@ -175143,7 +175143,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wenn NOOP die Herzfrequenz aus der optischen Wellenform WHOOP 5/MG v26 rekonstruiert (die Sekunden, in denen das Band keine HR gespeichert hat), verfeinere den Autokorrelationspeak mit einem parabolischen Sublag-Fit, so dass die Schätzung nicht auf etwa 16 bpm-Schritte in der Nähe einer hohen HR quantifiziert wird. Es füllt nur Sekunden, die das Band nie gemeldet hat; es überschreibt niemals eine gespeicherte HR. 5/MG, standardmäßig ausgeschaltet."
+            "value": "Wenn MOVA die Herzfrequenz aus der optischen Wellenform WHOOP 5/MG v26 rekonstruiert (die Sekunden, in denen das Band keine HR gespeichert hat), verfeinere den Autokorrelationspeak mit einem parabolischen Sublag-Fit, so dass die Schätzung nicht auf etwa 16 bpm-Schritte in der Nähe einer hohen HR quantifiziert wird. Es füllt nur Sekunden, die das Band nie gemeldet hat; es überschreibt niemals eine gespeicherte HR. 5/MG, standardmäßig ausgeschaltet."
           }
         },
         "es": {
@@ -176060,7 +176060,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Die ganze Nacht ist das Standardmaß von NOOP; Deep Sleep Pools HRV nur über Slow Wave Sleep, lesen niedriger und passend zu WHOOP. Durch das Umschalten werden deine letzten Nächte über das neue Fenster neu bewertet und sofort wirksam, sobald du ein paar Nächte Daten hast."
+            "value": "Die ganze Nacht ist das Standardmaß von MOVA; Deep Sleep Pools HRV nur über Slow Wave Sleep, lesen niedriger und passend zu WHOOP. Durch das Umschalten werden deine letzten Nächte über das neue Fenster neu bewertet und sofort wirksam, sobald du ein paar Nächte Daten hast."
           }
         },
         "es": {

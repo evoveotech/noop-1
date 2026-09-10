@@ -725,9 +725,9 @@ final class Backfiller {
                 loggedUnmappedVersions.insert(v)
                 switch support {
                 case .unmapped:
-                    log?("Historical records use firmware layout v\(v), which NOOP doesn't decode yet: those records carry no heart rate or motion, so any night made only of them can't be staged from the strap. A strap emitting a mix of layouts still stages the nights it can. Please report this (issue #1992).")
+                    log?("Historical records use firmware layout v\(v), which MOVA doesn't decode yet: those records carry no heart rate or motion, so any night made only of them can't be staged from the strap. A strap emitting a mix of layouts still stages the nights it can. Please report this (issue #1992).")
                 case .decodesWithoutNamedSignal:
-                    log?("Historical records use firmware layout v\(v). NOOP decodes it, but these records carry no per-second heart rate and no motion (they hold raw sensor channels nothing scores yet), so any night made only of them can't be staged from the strap. A strap emitting a mix of layouts still stages the nights it can. Please report this (issue #1992).")
+                    log?("Historical records use firmware layout v\(v). MOVA decodes it, but these records carry no per-second heart rate and no motion (they hold raw sensor channels nothing scores yet), so any night made only of them can't be staged from the strap. A strap emitting a mix of layouts still stages the nights it can. Please report this (issue #1992).")
                 case .supported:
                     break
                 }
