@@ -1305,30 +1305,79 @@ final class Repository: ObservableObject {
         guard !sessions.isEmpty, let store = await ensureStore() else { return [:] }
         let rawIds = rawPhysiologyReadIds(store: store)
         let computedIds = rawComputedReadIds(store: store)
-        var out: [Int: [Double]] = [:]
-        for session in sessions where out[session.startTs] == nil {
-            // CachedSleepSession has no provenance field. Re-resolve the exact visible block using the
-            // same imported-wins order as allSleepSessions, then probe its computed owner first.
-            var owner: String?
+        let starts = sessions.map(\.startTs)
+        let lo = starts.min() ?? 0
+        let hi = starts.max() ?? 0
+
+        // Phase 1, ownership.
+        //
+        // A block read from the store now carries the device it was read from, so most of the time there
+        // is nothing to resolve. The probe below runs only for blocks built by hand, which is tests and
+        // the importers, and the bounds read happens only if at least one such block is present.
+        //
+        // Provenance gives the SAME answer the probe does. The search takes the first id in
+        // `rawIds + computedIds` whose bounds match, then normalises it to its `-noop` twin, and
+        // `computedIds` is exactly `rawIds` mapped to that suffix. So a block read under a raw id and the
+        // same block read under its computed one both resolve to that one computed source either way.
+        // Disagreeing would take two DIFFERENT straps sharing a start and an end to the second, and
+        // `dedupBlocks` already collapses that pair to a single block, so the probe was picking one of
+        // them arbitrarily as well.
+        //
+        // `sleepSessionBounds`, not `sleepSessions`: the check needs two integers per block, and the fuller
+        // read selects `stagesJSON` among other columns, so it would haul every night's staging blob once
+        // per candidate device to compare a pair of timestamps. Unpaged, so a caller passing a sparse
+        // subset of a wide span cannot page short and lose the owners it dropped.
+        var boundsByDevice: [String: [Int: Int]] = [:]   // deviceId -> startTs -> endTs
+        if sessions.contains(where: { $0.deviceId == nil }) {
             for id in rawIds + computedIds {
-                let rows = (try? await store.sleepSessions(deviceId: id, from: session.startTs,
-                                                           to: session.startTs, limit: 4)) ?? []
-                if rows.contains(where: { $0.startTs == session.startTs && $0.endTs == session.endTs }) {
-                    owner = id
-                    break
+                boundsByDevice[id] = (try? await store.sleepSessionBounds(deviceId: id,
+                                                                          from: lo, to: hi)) ?? [:]
+            }
+        }
+
+        // Resolve each block's ordered source list: its own device when the read supplied one, else the
+        // imported-wins owner search, then its computed twin first and the computed ids behind it.
+        var sourcesByStart: [Int: [String]] = [:]
+        for session in sessions where sourcesByStart[session.startTs] == nil {
+            var owner: String? = session.deviceId
+            if owner == nil {
+                for id in rawIds + computedIds {
+                    if boundsByDevice[id]?[session.startTs] == session.endTs {
+                        owner = id
+                        break
+                    }
                 }
             }
             let ownerComputed = owner.map { $0.hasSuffix("-noop") ? $0 : $0 + "-noop" }
-            let sources = ([ownerComputed].compactMap { $0 } + computedIds).reduce(into: [String]()) {
-                if !$0.contains($1) { $0.append($1) }
+            sourcesByStart[session.startTs] = ([ownerComputed].compactMap { $0 } + computedIds)
+                .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        }
+
+        // Phase 2, motion, in ROUNDS rather than all sources for all blocks.
+        //
+        // A night's motion is one value per epoch, so a night is kilobytes of JSON and a long history is
+        // tens of megabytes. Asking every computed device for every block would decode that several times
+        // over to keep one copy, which is the same trade as pulling `stagesJSON` above: fewer round trips
+        // bought with far more bytes. Round k asks each device only for the blocks whose k-th source it is
+        // and which are still unfilled, so a block is read from its second source only if its first had
+        // nothing. That is the early exit the per-session loop had, kept, with D reads per round instead
+        // of one per block. Owned blocks resolve in the first round, so the second rarely runs.
+        var out: [Int: [Double]] = [:]
+        var round = 0
+        let maxRounds = sourcesByStart.values.map(\.count).max() ?? 0
+        while round < maxRounds {
+            var wantedByDevice: [String: [Int]] = [:]
+            for (start, sources) in sourcesByStart where out[start] == nil && round < sources.count {
+                wantedByDevice[sources[round], default: []].append(start)
             }
-            for id in sources {
-                if let motion = (try? await store.sessionMotion(deviceId: id, sessionStart: session.startTs)) ?? nil,
-                   !motion.isEmpty {
-                    out[session.startTs] = motion
-                    break
+            if wantedByDevice.isEmpty { break }
+            for (id, wanted) in wantedByDevice {
+                let motions = (try? await store.sessionMotions(deviceId: id, sessionStarts: wanted)) ?? [:]
+                for (start, motion) in motions where out[start] == nil && !motion.isEmpty {
+                    out[start] = motion
                 }
             }
+            round += 1
         }
         return out
     }
